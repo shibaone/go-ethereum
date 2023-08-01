@@ -20,6 +20,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 // EVMLogger is used to collect execution traces from an EVM transaction
@@ -34,10 +35,10 @@ type EVMLogger interface {
 	CaptureArbitrumStorageSet(key, value common.Hash, depth int, before bool)
 
 	// Transaction level
-	CaptureTxStart(gasLimit uint64)
-	CaptureTxEnd(restGas uint64)
+	CaptureTxStart(evm *EVM, tx *types.Transaction)
+	CaptureTxEnd(receipt *types.Receipt, err error)
 	// Top call frame
-	CaptureStart(env *EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int)
+	CaptureStart(from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int)
 	CaptureEnd(output []byte, gasUsed uint64, err error)
 	// Rest of call frames
 	CaptureEnter(typ OpCode, from common.Address, to common.Address, input []byte, gas uint64, value *big.Int)
@@ -45,4 +46,7 @@ type EVMLogger interface {
 	// Opcode level
 	CaptureState(pc uint64, op OpCode, gas, cost uint64, scope *ScopeContext, rData []byte, depth int, err error)
 	CaptureFault(pc uint64, op OpCode, gas, cost uint64, scope *ScopeContext, depth int, err error)
+	CaptureKeccakPreimage(hash common.Hash, data []byte)
+	// Misc
+	OnGasConsumed(gas, amount uint64)
 }

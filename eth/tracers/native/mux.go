@@ -21,6 +21,8 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 )
@@ -59,9 +61,9 @@ func newMuxTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, er
 }
 
 // CaptureStart implements the EVMLogger interface to initialize the tracing operation.
-func (t *muxTracer) CaptureStart(env *vm.EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
+func (t *muxTracer) CaptureStart(from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
 	for _, t := range t.tracers {
-		t.CaptureStart(env, from, to, create, input, gas, value)
+		t.CaptureStart(from, to, create, input, gas, value)
 	}
 }
 
@@ -86,6 +88,20 @@ func (t *muxTracer) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, scop
 	}
 }
 
+// CaptureKeccakPreimage is called during the KECCAK256 opcode.
+func (t *muxTracer) CaptureKeccakPreimage(hash common.Hash, data []byte) {
+	for _, t := range t.tracers {
+		t.CaptureKeccakPreimage(hash, data)
+	}
+}
+
+// CaptureGasConsumed is called when gas is consumed.
+func (t *muxTracer) OnGasConsumed(gas, amount uint64) {
+	for _, t := range t.tracers {
+		t.OnGasConsumed(gas, amount)
+	}
+}
+
 // CaptureEnter is called when EVM enters a new scope (via call, create or selfdestruct).
 func (t *muxTracer) CaptureEnter(typ vm.OpCode, from common.Address, to common.Address, input []byte, gas uint64, value *big.Int) {
 	for _, t := range t.tracers {
@@ -101,15 +117,51 @@ func (t *muxTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 	}
 }
 
-func (t *muxTracer) CaptureTxStart(gasLimit uint64) {
+func (t *muxTracer) CaptureTxStart(env *vm.EVM, tx *types.Transaction) {
 	for _, t := range t.tracers {
-		t.CaptureTxStart(gasLimit)
+		t.CaptureTxStart(env, tx)
 	}
 }
 
-func (t *muxTracer) CaptureTxEnd(restGas uint64) {
+func (t *muxTracer) CaptureTxEnd(receipt *types.Receipt, err error) {
 	for _, t := range t.tracers {
-		t.CaptureTxEnd(restGas)
+		t.CaptureTxEnd(receipt, err)
+	}
+}
+
+func (t *muxTracer) OnBalanceChange(a common.Address, prev, new *big.Int, reason state.BalanceChangeReason) {
+	for _, t := range t.tracers {
+		t.OnBalanceChange(a, prev, new, reason)
+	}
+}
+
+func (t *muxTracer) OnNonceChange(a common.Address, prev, new uint64) {
+	for _, t := range t.tracers {
+		t.OnNonceChange(a, prev, new)
+	}
+}
+
+func (t *muxTracer) OnCodeChange(a common.Address, prevCodeHash common.Hash, prev []byte, codeHash common.Hash, code []byte) {
+	for _, t := range t.tracers {
+		t.OnCodeChange(a, prevCodeHash, prev, codeHash, code)
+	}
+}
+
+func (t *muxTracer) OnStorageChange(a common.Address, k, prev, new common.Hash) {
+	for _, t := range t.tracers {
+		t.OnStorageChange(a, k, prev, new)
+	}
+}
+
+func (t *muxTracer) OnLog(log *types.Log) {
+	for _, t := range t.tracers {
+		t.OnLog(log)
+	}
+}
+
+func (t *muxTracer) OnNewAccount(a common.Address) {
+	for _, t := range t.tracers {
+		t.OnNewAccount(a)
 	}
 }
 

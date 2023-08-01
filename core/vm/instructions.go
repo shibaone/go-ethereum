@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -250,7 +251,9 @@ func opKeccak256(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	if evm.Config.EnablePreimageRecording {
 		evm.StateDB.AddPreimage(interpreter.hasherBuf, data)
 	}
-
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.CaptureKeccakPreimage(common.BytesToHash(interpreter.hasherBuf[:]), data)
+	}
 	size.SetBytes(interpreter.hasherBuf[:])
 	return nil, nil
 }
@@ -606,7 +609,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	// reuse size int for stackvalue
 	stackvalue := size
 
-	scope.Contract.UseGas(gas)
+	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer)
 	//TODO: use uint256.Int instead of converting with toBig()
 	var bigVal = big0
 	if !value.IsZero() {
@@ -649,7 +652,7 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	)
 	// Apply EIP150
 	gas -= gas / 64
-	scope.Contract.UseGas(gas)
+	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer)
 	// reuse size int for stackvalue
 	stackvalue := size
 	//TODO: use uint256.Int instead of converting with toBig()
@@ -837,15 +840,15 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	}
 	beneficiary := scope.Stack.pop()
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
-	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance)
+	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance, state.BalanceChangeSuicideRefund)
 	interpreter.evm.StateDB.Suicide(scope.Contract.Address())
 	if beneficiary.Bytes20() == scope.Contract.Address() {
 		// Arbitrum: calling selfdestruct(this) burns the balance
 		interpreter.evm.StateDB.ExpectBalanceBurn(balance)
 	}
-	if interpreter.evm.Config.Debug {
-		interpreter.evm.Config.Tracer.CaptureEnter(SELFDESTRUCT, scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance)
-		interpreter.evm.Config.Tracer.CaptureExit([]byte{}, 0, nil)
+	if tracer := interpreter.evm.Config.Tracer; tracer != nil {
+		tracer.CaptureEnter(SELFDESTRUCT, scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance)
+		tracer.CaptureExit([]byte{}, 0, nil)
 	}
 	return nil, errStopToken
 }

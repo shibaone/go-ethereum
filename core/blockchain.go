@@ -163,6 +163,18 @@ var defaultCacheConfig = &CacheConfig{
 	SnapshotWait:   true,
 }
 
+// BlockchainLogger is used to collect traces during chain processing.
+// Please make a copy of the referenced types if you intend to retain them.
+type BlockchainLogger interface {
+	vm.EVMLogger
+	state.StateLogger
+	// OnBlockStart is called before executing `block`.
+	// `td` is the total difficulty prior to `block`.
+	OnBlockStart(block *types.Block, td *big.Int, finalized *types.Header, safe *types.Header)
+	OnBlockEnd(err error)
+	OnGenesisBlock(genesis *types.Block, alloc GenesisAlloc)
+}
+
 // BlockChain represents the canonical chain given a database with a genesis
 // block. The Blockchain manages chain imports, reverts, chain reorganisations.
 //
@@ -236,6 +248,7 @@ type BlockChain struct {
 	processor  Processor // Block transaction processor interface
 	forker     *ForkChoice
 	vmConfig   vm.Config
+	logger     BlockchainLogger
 }
 
 type trieGcEntry struct {
@@ -258,6 +271,15 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		Preimages: cacheConfig.Preimages,
 	})
 
+	var logger BlockchainLogger
+	if vmConfig.Tracer != nil {
+		l, ok := vmConfig.Tracer.(BlockchainLogger)
+		if !ok {
+			return nil, errors.New("only extended tracers are supported for live mode")
+		}
+		logger = l
+	}
+
 	var genesisHash common.Hash
 	var genesisErr error
 
@@ -270,7 +292,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		// Setup the genesis block, commit the provided genesis specification
 		// to database if the genesis block is not present yet, or load the
 		// stored one from database.
-		chainConfig, genesisHash, genesisErr = SetupGenesisBlockWithOverride(db, triedb, genesis, overrides)
+		chainConfig, genesisHash, genesisErr = SetupGenesisBlockWithOverride(db, triedb, genesis, overrides, logger)
 		if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 			return nil, genesisErr
 		}
@@ -300,6 +322,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		futureBlocks:  lru.NewCache[common.Hash, *types.Block](maxFutureBlocks),
 		engine:        engine,
 		vmConfig:      vmConfig,
+		logger:        logger,
 	}
 	bc.forker = NewForkChoice(bc, shouldPreserve)
 	bc.stateCache = state.NewDatabaseWithNodeDB(bc.db, bc.triedb)
@@ -1817,6 +1840,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		if err != nil {
 			return it.index, err
 		}
+		statedb.SetLogger(bc.logger)
 
 		// Enable prefetching to pull in trie node paths while processing transactions
 		statedb.StartPrefetcher("chain")
@@ -1830,7 +1854,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				throwaway, _ := state.New(parent.Root, bc.stateCache, bc.snaps)
 
 				go func(start time.Time, followup *types.Block, throwaway *state.StateDB) {
-					bc.prefetcher.Prefetch(followup, throwaway, bc.vmConfig, &followupInterrupt)
+					vmCfg := bc.vmConfig
+					vmCfg.Tracer = nil
+					bc.prefetcher.Prefetch(followup, throwaway, vmCfg, &followupInterrupt)
 
 					blockPrefetchExecuteTimer.Update(time.Since(start))
 					if atomic.LoadUint32(&followupInterrupt) == 1 {
@@ -1842,10 +1868,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
+
+		if bc.logger != nil {
+			td := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+			bc.logger.OnBlockStart(block, td, bc.CurrentFinalBlock(), bc.CurrentSafeBlock())
+		}
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
+			if bc.logger != nil {
+				bc.logger.OnBlockEnd(err)
+			}
 			return it.index, err
 		}
 		ptime := time.Since(pstart)
@@ -1854,6 +1888,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
+			if bc.logger != nil {
+				bc.logger.OnBlockEnd(err)
+			}
 			return it.index, err
 		}
 		vtime := time.Since(vstart)
@@ -1888,6 +1925,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 		atomic.StoreUint32(&followupInterrupt, 1)
 		if err != nil {
+			if bc.logger != nil {
+				bc.logger.OnBlockEnd(err)
+			}
 			return it.index, err
 		}
 		// Update the metrics touched during block commit
@@ -1905,6 +1945,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		dirty, _ := bc.triedb.Size()
 		stats.report(chain, it.index, dirty, setHead)
+
+		if bc.logger != nil {
+			bc.logger.OnBlockEnd(nil)
+		}
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count

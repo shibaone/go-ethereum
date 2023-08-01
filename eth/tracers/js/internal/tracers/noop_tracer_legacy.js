@@ -14,16 +14,16 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// noopTracer is just the barebone boilerplate code required from a JavaScript
+// NoopTracer is just the barebone boilerplate code required from a JavaScript
 // object to be usable as a transaction tracer.
 {
-	// step is invoked for every opcode that the VM executes.
-	step: function(log, db) { },
+    // step is invoked for every opcode that the VM executes.
+    step: function(log, db) { },
 
-	// fault is invoked when the actual execution of an opcode fails.
-	fault: function(log, db) { },
+    // fault is invoked when the actual execution of an opcode fails.
+    fault: function(log, db) { },
 
-	// result is invoked when all the opcodes have been iterated over and returns
-	// the final result of the tracing.
-	result: function(ctx, db) { return {}; }
+    // result is invoked when all the opcodes have been iterated over and returns
+    // the final result of the tracing.
+    result: function(ctx, db) { return {}; }
 }

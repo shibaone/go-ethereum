@@ -55,6 +55,19 @@ func (n *proofList) Delete(key []byte) error {
 	panic("not supported")
 }
 
+// StateLogger is used to collect state update traces from  EVM transaction
+// execution.
+// Note that reference types are actual VM data structures; make copies
+// if you need to retain them beyond the current call.
+type StateLogger interface {
+	OnBalanceChange(addr common.Address, prev, new *big.Int, reason BalanceChangeReason)
+	OnNonceChange(addr common.Address, prev, new uint64)
+	OnCodeChange(addr common.Address, prevCodeHash common.Hash, prevCode []byte, codeHash common.Hash, code []byte)
+	OnStorageChange(addr common.Address, slot common.Hash, prev, new common.Hash)
+	OnLog(log *types.Log)
+	OnNewAccount(addr common.Address)
+}
+
 // StateDB structs within the ethereum protocol are used to store anything
 // within the merkle trie. StateDBs take care of caching and storing
 // nested states. It's the general query interface to retrieve:
@@ -68,6 +81,7 @@ type StateDB struct {
 	prefetcher *triePrefetcher
 	trie       Trie
 	hasher     crypto.KeccakState
+	logger     StateLogger
 
 	// originalRoot is the pre-state root, before any changes were made.
 	// It will be updated when the Commit is called.
@@ -179,6 +193,11 @@ func NewDeterministic(root common.Hash, db Database) (*StateDB, error) {
 	return sdb, nil
 }
 
+// SetLogger sets the logger for account update hooks.
+func (s *StateDB) SetLogger(l StateLogger) {
+	s.logger = l
+}
+
 // StartPrefetcher initializes a new trie prefetcher to pull in nodes from the
 // state trie concurrently while the state is mutated so that when we reach the
 // commit phase, most of the needed data is already hot.
@@ -219,6 +238,9 @@ func (s *StateDB) AddLog(log *types.Log) {
 	log.TxHash = s.thash
 	log.TxIndex = uint(s.txIndex)
 	log.Index = s.logSize
+	if s.logger != nil {
+		s.logger.OnLog(log)
+	}
 	s.logs[s.thash] = append(s.logs[s.thash], log)
 	s.logSize++
 }
@@ -413,24 +435,24 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
  */
 
 // AddBalance adds amount to the account associated with addr.
-func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
+func (s *StateDB) AddBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
-		stateObject.AddBalance(amount)
+		stateObject.AddBalance(amount, reason)
 	}
 }
 
 // SubBalance subtracts amount from the account associated with addr.
-func (s *StateDB) SubBalance(addr common.Address, amount *big.Int) {
+func (s *StateDB) SubBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, amount)
-		stateObject.SubBalance(amount)
+		stateObject.SubBalance(amount, reason)
 	}
 }
 
-func (s *StateDB) SetBalance(addr common.Address, amount *big.Int) {
+func (s *StateDB) SetBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		if amount == nil {
@@ -439,7 +461,7 @@ func (s *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 		prevBalance := stateObject.Balance()
 		s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
 		s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, prevBalance)
-		stateObject.SetBalance(amount)
+		stateObject.SetBalance(amount, reason)
 	}
 }
 
@@ -668,6 +690,10 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	newobj = newObject(s, addr, types.StateAccount{})
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
+		// TODO: add isPrecompile check
+		if s.logger != nil {
+			s.logger.OnNewAccount(addr)
+		}
 	} else {
 		s.journal.append(resetObjectChange{prev: prev, prevdestruct: prevdestruct})
 	}

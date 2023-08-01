@@ -25,6 +25,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 )
@@ -116,6 +117,7 @@ type flatCallTracer struct {
 	beforeEVMTransfers []arbitrumTransfer
 	afterEVMTransfers  []arbitrumTransfer
 
+	tracers.NoopTracer
 	tracer            *callTracer
 	config            flatCallTracerConfig
 	ctx               *tracers.Context // Holds tracer context data
@@ -156,11 +158,8 @@ func newFlatCallTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Trace
 }
 
 // CaptureStart implements the EVMLogger interface to initialize the tracing operation.
-func (t *flatCallTracer) CaptureStart(env *vm.EVM, from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
-	t.tracer.CaptureStart(env, from, to, create, input, gas, value)
-	// Update list of precompiles based on current block
-	rules := env.ChainConfig().Rules(env.Context.BlockNumber, env.Context.Random != nil, env.Context.Time, env.Context.ArbOSVersion)
-	t.activePrecompiles = vm.ActivePrecompiles(rules)
+func (t *flatCallTracer) CaptureStart(from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) {
+	t.tracer.CaptureStart(from, to, create, input, gas, value)
 }
 
 // CaptureEnd is called after the call finishes to finalize the tracing.
@@ -213,12 +212,15 @@ func (t *flatCallTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 	}
 }
 
-func (t *flatCallTracer) CaptureTxStart(gasLimit uint64) {
-	t.tracer.CaptureTxStart(gasLimit)
+func (t *flatCallTracer) CaptureTxStart(env *vm.EVM, tx *types.Transaction) {
+	t.tracer.CaptureTxStart(env, tx)
+	// Update list of precompiles based on current block
+	rules := env.ChainConfig().Rules(env.Context.BlockNumber, env.Context.Random != nil, env.Context.Time, env.Context.ArbOSVersion)
+	t.activePrecompiles = vm.ActivePrecompiles(rules)
 }
 
-func (t *flatCallTracer) CaptureTxEnd(restGas uint64) {
-	t.tracer.CaptureTxEnd(restGas)
+func (t *flatCallTracer) CaptureTxEnd(receipt *types.Receipt, err error) {
+	t.tracer.CaptureTxEnd(receipt, err)
 }
 
 // GetResult returns an empty json object.

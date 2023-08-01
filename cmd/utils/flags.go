@@ -597,6 +597,11 @@ var (
 		Usage:    "Record information useful for VM and contract debugging",
 		Category: flags.VMCategory,
 	}
+	VMTraceFlag = &cli.BoolFlag{
+		Name:     "vmtrace",
+		Usage:    "Record internal VM operations (costly)",
+		Category: flags.VMCategory,
+	}
 
 	// API options.
 	RPCGlobalGasCapFlag = &cli.Uint64Flag{
@@ -1832,6 +1837,9 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		// TODO(fjl): force-enable this in --dev mode
 		cfg.EnablePreimageRecording = ctx.Bool(VMEnableDebugFlag.Name)
 	}
+	if ctx.IsSet(VMTraceFlag.Name) {
+		cfg.LiveTrace = ctx.Bool(VMTraceFlag.Name)
+	}
 
 	if ctx.IsSet(RPCGlobalGasCapFlag.Name) {
 		cfg.RPCGasCap = ctx.Uint64(RPCGlobalGasCapFlag.Name)
@@ -2266,12 +2274,15 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (*core.BlockCh
 		cache.TrieDirtyLimit = ctx.Int(CacheFlag.Name) * ctx.Int(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.Bool(VMEnableDebugFlag.Name)}
-
+	if ctx.IsSet(VMTraceFlag.Name) {
+		vmcfg.Tracer = tracers.NewPrinter()
+	}
 	// Disable transaction indexing/unindexing by default.
 	chain, err := core.NewBlockChain(chainDb, cache, nil, gspec, nil, engine, vmcfg, nil, nil)
 	if err != nil {
 		Fatalf("Can't create BlockChain: %v", err)
 	}
+
 	return chain, chainDb
 }
 

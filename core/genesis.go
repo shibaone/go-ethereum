@@ -125,7 +125,7 @@ func (ga *GenesisAlloc) deriveHash() (common.Hash, error) {
 		return common.Hash{}, err
 	}
 	for addr, account := range *ga {
-		statedb.AddBalance(addr, account.Balance)
+		statedb.AddBalance(addr, account.Balance, state.BalanceChangeGenesisBalance)
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
 		for key, value := range account.Storage {
@@ -138,13 +138,14 @@ func (ga *GenesisAlloc) deriveHash() (common.Hash, error) {
 // flush is very similar with deriveHash, but the main difference is
 // all the generated states will be persisted into the given database.
 // Also, the genesis state specification will be flushed as well.
-func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhash common.Hash) error {
+func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhash common.Hash, bcLogger BlockchainLogger) error {
 	statedb, err := state.New(common.Hash{}, state.NewDatabaseWithNodeDB(db, triedb), nil)
+	statedb.SetLogger(bcLogger)
 	if err != nil {
 		return err
 	}
 	for addr, account := range *ga {
-		statedb.AddBalance(addr, account.Balance)
+		statedb.AddBalance(addr, account.Balance, state.BalanceChangeGenesisBalance)
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
 		for key, value := range account.Storage {
@@ -202,7 +203,7 @@ func CommitGenesisState(db ethdb.Database, triedb *trie.Database, blockhash comm
 			return errors.New("not found")
 		}
 	}
-	return alloc.flush(db, triedb, blockhash)
+	return alloc.flush(db, triedb, blockhash, nil)
 }
 
 // GenesisAccount is an account in the state of the genesis block.
@@ -284,10 +285,10 @@ type ChainOverrides struct {
 //
 // The returned chain configuration is never nil.
 func SetupGenesisBlock(db ethdb.Database, triedb *trie.Database, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
-	return SetupGenesisBlockWithOverride(db, triedb, genesis, nil)
+	return SetupGenesisBlockWithOverride(db, triedb, genesis, nil, nil)
 }
 
-func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, genesis *Genesis, overrides *ChainOverrides) (*params.ChainConfig, common.Hash, error) {
+func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, genesis *Genesis, overrides *ChainOverrides, bcLogger BlockchainLogger) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
@@ -307,7 +308,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		} else {
 			log.Info("Writing custom genesis block")
 		}
-		block, err := genesis.Commit(db, triedb)
+		block, err := genesis.Commit(db, triedb, bcLogger)
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
 		}
@@ -326,7 +327,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
-		block, err := genesis.Commit(db, triedb)
+		block, err := genesis.Commit(db, triedb, bcLogger)
 		if err != nil {
 			return genesis.Config, hash, err
 		}
@@ -475,7 +476,7 @@ func (g *Genesis) ToBlock() *types.Block {
 
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
-func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block, error) {
+func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database, bcLogger BlockchainLogger) (*types.Block, error) {
 	block := g.ToBlock()
 	if block.Number().Sign() != 0 {
 		return nil, errors.New("can't commit genesis block with number > 0")
@@ -490,10 +491,13 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 	if config.Clique != nil && len(block.Extra()) < 32+crypto.SignatureLength {
 		return nil, errors.New("can't start clique chain without signers")
 	}
+	if bcLogger != nil {
+		bcLogger.OnGenesisBlock(block, g.Alloc)
+	}
 	// All the checks has passed, flush the states derived from the genesis
 	// specification as well as the specification itself into the provided
 	// database.
-	if err := g.Alloc.flush(db, triedb, block.Hash()); err != nil {
+	if err := g.Alloc.flush(db, triedb, block.Hash(), bcLogger); err != nil {
 		return nil, err
 	}
 	WriteHeadBlock(db, block, nil)
@@ -519,7 +523,7 @@ func WriteHeadBlock(db ethdb.Database, block *types.Block, prevDifficulty *big.I
 // Note the state changes will be committed in hash-based scheme, use Commit
 // if path-scheme is preferred.
 func (g *Genesis) MustCommit(db ethdb.Database) *types.Block {
-	block, err := g.Commit(db, trie.NewDatabase(db))
+	block, err := g.Commit(db, trie.NewDatabase(db), nil)
 	if err != nil {
 		panic(err)
 	}

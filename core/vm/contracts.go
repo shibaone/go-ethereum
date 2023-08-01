@@ -161,7 +161,7 @@ type AdvancedPrecompile interface {
 // - the returned bytes,
 // - the _remaining_ gas,
 // - any error that occurred
-func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uint64, advancedInfo *AdvancedPrecompileCall) (ret []byte, remainingGas uint64, err error) {
+func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uint64, advancedInfo *AdvancedPrecompileCall, logger EVMLogger) (ret []byte, remainingGas uint64, err error) {
 	advanced, isAdvanced := p.(AdvancedPrecompile)
 	if isAdvanced {
 		return advanced.RunAdvanced(input, suppliedGas, advancedInfo)
@@ -170,6 +170,9 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uin
 	gasCost := p.RequiredGas(input)
 	if suppliedGas < gasCost {
 		return nil, 0, ErrOutOfGas
+	}
+	if logger != nil {
+		logger.OnGasConsumed(suppliedGas, gasCost)
 	}
 	suppliedGas -= gasCost
 	output, err := p.Run(input)

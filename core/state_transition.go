@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
@@ -266,7 +267,7 @@ func (st *StateTransition) buyGas() error {
 	st.gasRemaining += st.msg.GasLimit
 
 	st.initialGas = st.msg.GasLimit
-	st.state.SubBalance(st.msg.From, mgval)
+	st.state.SubBalance(st.msg.From, mgval, state.BalanceChangeGasBuy)
 
 	// Arbitrum: record fee payment
 	if st.evm.Config.Debug {
@@ -369,13 +370,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		return nil, err
 	}
 
-	if st.evm.Config.Debug {
-		st.evm.Config.Tracer.CaptureTxStart(st.initialGas)
-		defer func() {
-			st.evm.Config.Tracer.CaptureTxEnd(st.gasRemaining)
-		}()
-	}
-
 	var (
 		msg              = st.msg
 		sender           = vm.AccountRef(msg.From)
@@ -390,6 +384,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 	if st.gasRemaining < gas {
 		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gasRemaining, gas)
+	}
+	if t := st.evm.Config.Tracer; t != nil {
+		t.OnGasConsumed(st.gasRemaining, gas)
 	}
 	st.gasRemaining -= gas
 
@@ -448,7 +445,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	} else {
 		fee := new(big.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTip)
-		st.state.AddBalance(tipReceipient, fee)
+		st.state.AddBalance(tipReceipient, fee, state.BalanceChangeRewardTransactionFee)
 		tipAmount = fee
 	}
 
@@ -492,7 +489,7 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gasRemaining), st.msg.GasPrice)
-	st.state.AddBalance(st.msg.From, remaining)
+	st.state.AddBalance(st.msg.From, remaining, state.BalanceChangeGasRefund)
 
 	// Arbitrum: record the gas refund
 	if st.evm.Config.Debug {

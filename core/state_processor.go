@@ -17,6 +17,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -64,6 +65,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		blockNumber = block.Number()
 		allLogs     []*types.Log
 		gp          = new(GasPool).AddGas(block.GasLimit())
+		err         error
 	)
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
@@ -73,12 +75,14 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
-		msg, err := TransactionToMessage(tx, types.MakeSigner(p.config, header.Number), header.BaseFee)
+		var msg *Message
+		msg, err = TransactionToMessage(tx, types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		statedb.SetTxContext(tx.Hash(), i)
-		receipt, _, err := applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, nil)
+		var receipt *types.Receipt
+		receipt, _, err = applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, nil)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
@@ -88,7 +92,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Fail if Shanghai not enabled and len(withdrawals) is non-zero.
 	withdrawals := block.Withdrawals()
 	if len(withdrawals) > 0 && !p.config.IsShanghai(block.Time(), types.DeserializeHeaderExtraInformation(header).ArbOSFormatVersion) {
-		return nil, nil, 0, fmt.Errorf("withdrawals before shanghai")
+		err = errors.New("withdrawals before shanghai")
+		return nil, nil, 0, err
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), withdrawals)
@@ -97,6 +102,16 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, resultFilter func(*ExecutionResult) error) (*types.Receipt, *ExecutionResult, error) {
+	var (
+		receipt *types.Receipt
+		err     error
+	)
+	if evm.Config.Tracer != nil {
+		evm.Config.Tracer.CaptureTxStart(evm, tx)
+		defer func() {
+			evm.Config.Tracer.CaptureTxEnd(receipt, err)
+		}()
+	}
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
@@ -125,7 +140,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.
-	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
+	receipt = &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: *usedGas}
 	if result.Failed() {
 		receipt.Status = types.ReceiptStatusFailed
 	} else {
