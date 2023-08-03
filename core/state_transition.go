@@ -264,6 +264,11 @@ func (st *StateTransition) buyGas() error {
 	if err := st.gp.SubGas(st.msg.GasLimit); err != nil {
 		return err
 	}
+
+	if st.evm.Config.Tracer != nil {
+		st.evm.Config.Tracer.OnGasConsumed(0, -st.msg.GasLimit, vm.GasInitialBalance)
+	}
+
 	st.gasRemaining += st.msg.GasLimit
 
 	st.initialGas = st.msg.GasLimit
@@ -386,7 +391,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gasRemaining, gas)
 	}
 	if t := st.evm.Config.Tracer; t != nil {
-		t.OnGasConsumed(st.gasRemaining, gas)
+		t.OnGasConsumed(st.gasRemaining, gas, vm.GasChangeIntrinsicGas)
 	}
 	st.gasRemaining -= gas
 
@@ -484,6 +489,9 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 		if refund > st.state.GetRefund() {
 			refund = st.state.GetRefund()
 		}
+		if st.evm.Config.Tracer != nil {
+			st.evm.Config.Tracer.OnGasConsumed(st.gasRemaining, -refund, vm.GasRefunded)
+		}
 		st.gasRemaining += refund
 	}
 
@@ -494,6 +502,9 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 	// Arbitrum: record the gas refund
 	if st.evm.Config.Debug {
 		st.evm.Config.Tracer.CaptureArbitrumTransfer(st.evm, nil, &st.msg.From, remaining, false, "gasRefund")
+	}
+	if st.evm.Config.Tracer != nil {
+		st.evm.Config.Tracer.OnGasConsumed(st.gasRemaining, st.gasRemaining, vm.GasBuyBack)
 	}
 
 	// Also return remaining gas to the block gas counter so it is

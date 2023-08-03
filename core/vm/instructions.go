@@ -609,7 +609,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	// reuse size int for stackvalue
 	stackvalue := size
 
-	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer)
+	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer, GasChangeContractCreation)
 	//TODO: use uint256.Int instead of converting with toBig()
 	var bigVal = big0
 	if !value.IsZero() {
@@ -629,6 +629,11 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 		stackvalue.SetBytes(addr.Bytes())
 	}
 	scope.Stack.push(&stackvalue)
+
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.OnGasConsumed(scope.Contract.Gas, -returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	if suberr == ErrExecutionReverted {
@@ -652,7 +657,7 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	)
 	// Apply EIP150
 	gas -= gas / 64
-	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer)
+	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer, GasChangeContractCreation2)
 	// reuse size int for stackvalue
 	stackvalue := size
 	//TODO: use uint256.Int instead of converting with toBig()
@@ -669,6 +674,11 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 		stackvalue.SetBytes(addr.Bytes())
 	}
 	scope.Stack.push(&stackvalue)
+
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.OnGasConsumed(scope.Contract.Gas, -returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	if suberr == ErrExecutionReverted {
@@ -714,6 +724,11 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.OnGasConsumed(scope.Contract.Gas, -returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -749,6 +764,11 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.OnGasConsumed(scope.Contract.Gas, -returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -777,6 +797,11 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.OnGasConsumed(scope.Contract.Gas, -returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -805,6 +830,11 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.OnGasConsumed(scope.Contract.Gas, -returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
