@@ -30,7 +30,7 @@ func (p *Printer) CaptureEnd(output []byte, gasUsed uint64, err error) {
 
 // CaptureState implements the EVMLogger interface to trace a single step of VM execution.
 func (p *Printer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
-	//fmt.Printf("CaptureState: pc=%v, op=%v, gas=%v, cost=%v, scope=%v, rData=%v, depth=%v, err=%v\n", pc, op, gas, cost, scope, rData, depth, err)
+	//fmt.Printf("CaptureState: pc=%v, op=%v, gas=%v, cost=%v, scope=%v, rData=%s, depth=%v, err=%v\n", pc, op, gas, cost, scope, hexutil.Bytes(rData), depth, err)
 }
 
 // CaptureFault implements the EVMLogger interface to trace an execution fault.
@@ -120,6 +120,6 @@ func (p *Printer) OnNewAccount(a common.Address) {
 	fmt.Printf("OnNewAccount: a=%v\n", a)
 }
 
-func (p *Printer) OnGasConsumed(gas, amount uint64) {
+func (p *Printer) OnGasConsumed(gas, amount uint64, reason vm.GasChangeReason) {
 	fmt.Printf("OnGasConsumed: gas=%v, amount=%v\n", gas, amount)
 }
