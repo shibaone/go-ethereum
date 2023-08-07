@@ -87,6 +87,10 @@ func (p *Printer) OnBlockEnd(err error) {
 	fmt.Printf("OnBlockEnd: err=%v\n", err)
 }
 
+func (f *Printer) OnBlockUpdate(b *types.Block, td *big.Int) {
+	fmt.Printf("OnBlockUpdate: b=%v, td=%v\n", b.NumberU64(), td)
+}
+
 func (p *Printer) OnGenesisBlock(b *types.Block, alloc core.GenesisAlloc) {
 	fmt.Printf("OnGenesisBlock: b=%v, allocLength=%d\n", b.NumberU64(), len(alloc))
 }

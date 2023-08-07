@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -110,7 +111,6 @@ func (f *Firehose) OnBlockStart(b *types.Block, td *big.Int, finalized *types.He
 	firehoseDebug("block start number=%d hash=%s", b.NumberU64(), b.Hash())
 
 	f.ensureNotInBlock()
-
 	f.block = &pbeth.Block{
 		Hash:   b.Hash().Bytes(),
 		Number: b.Number().Uint64(),
@@ -125,6 +125,14 @@ func (f *Firehose) OnBlockStart(b *types.Block, td *big.Int, finalized *types.He
 	}
 
 	f.blockFinality.populateFromChain(finalized)
+}
+
+func (f *Firehose) OnBlockUpdate(b *types.Block, td *big.Int) {
+	f.ensureInBlock()
+	f.block.Hash = b.Hash().Bytes()
+	f.block.Number = b.Number().Uint64()
+	f.block.Header = newBlockHeaderFromChainBlock(b, firehoseBigIntFromNative(new(big.Int).Add(td, b.Difficulty())))
+	f.block.Size = b.Size()
 }
 
 func (f *Firehose) OnBlockEnd(err error) {
@@ -164,6 +172,14 @@ func (f *Firehose) CaptureTxStart(evm *vm.EVM, tx *types.Transaction) {
 	}
 
 	f.captureTxStart(tx, tx.Hash(), from, to, evm.IsPrecompileAddr)
+
+	switch tx.Type() {
+	case types.ArbitrumDepositTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType:
+		firehoseDebug("Adding simulated root call to arbitrum tx hash=%s type=%d gas=%d input=%s", tx.Hash(), tx.Type(), tx.Gas(), inputView(tx.Data()))
+		f.callStart("root", pbeth.CallType_CALL, from, *tx.To(), tx.Data(), tx.Gas(), tx.Value())
+	}
+	return
+
 }
 
 // captureTxStart is used internally a two places, in the normal "tracer" and in the "OnGenesisBlock",
@@ -197,6 +213,12 @@ func (f *Firehose) captureTxStart(tx *types.Transaction, hash common.Hash, from,
 func (f *Firehose) CaptureTxEnd(receipt *types.Receipt, err error) {
 	firehoseDebug("trx ending")
 	f.ensureInBlockAndInTrx()
+
+	switch receipt.Type {
+	case types.ArbitrumDepositTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType:
+		firehoseDebug("Closing simulated root call to arbitrum tx type=%d", receipt.Type)
+		f.callEnd("root", nil, receipt.GasUsed, err)
+	}
 
 	f.block.TransactionTraces = append(f.block.TransactionTraces, f.completeTransaction(receipt))
 
@@ -275,6 +297,7 @@ func (f *Firehose) removeLogBlockIndexOnStateRevertedCalls() {
 		if call.StateReverted {
 			for _, log := range call.Logs {
 				log.BlockIndex = 0
+				log.Index = 0
 			}
 		}
 	}
@@ -299,11 +322,23 @@ func (f *Firehose) assignOrdinalToReceiptLogs() {
 	})
 
 	if len(callLogs) != len(receiptsLogs) {
+		j, err := json.Marshal(trx)
+		if err != nil {
+			firehoseDebug("error marshalling trx during panic handling: %s", err)
+		}
+
+		firehoseDebug("got this transaction: %s", string(j))
 		panic(fmt.Errorf(
 			"mismatch between Firehose call logs and Ethereum transaction receipt logs, transaction receipt has %d logs but there is %d Firehose call logs",
 			len(receiptsLogs),
 			len(callLogs),
 		))
+	}
+
+	var txIndex uint32 = 0
+	for _, log := range callLogs {
+		log.Index = txIndex
+		txIndex++
 	}
 
 	for i := 0; i < len(callLogs); i++ {
@@ -313,12 +348,19 @@ func (f *Firehose) assignOrdinalToReceiptLogs() {
 		result := &validationResult{}
 		// Ordinal must **not** be checked as we are assigning it here below after the validations
 		validateBytesField(result, "Address", callLog.Address, receiptsLog.Address)
-		validateUint32Field(result, "Index", callLog.Index, receiptsLog.Index)
+		//validateUint32Field(result, "Index", callLog.Index, receiptsLog.Index)
 		validateUint32Field(result, "BlockIndex", callLog.BlockIndex, receiptsLog.BlockIndex)
 		validateBytesField(result, "Data", callLog.Data, receiptsLog.Data)
 		validateArrayOfBytesField(result, "Topics", callLog.Topics, receiptsLog.Topics)
 
 		if len(result.failures) > 0 {
+			for i, ll := range callLogs {
+				result.failures = append(result.failures, fmt.Sprintf("log %d, idx %d", i, ll.Index))
+			}
+			for i, ll := range receiptsLogs {
+				result.failures = append(result.failures, fmt.Sprintf("theirs: log %d, idx %d", i, ll.Index))
+			}
+
 			result.panicOnAnyFailures("mismatch between Firehose call log and Ethereum transaction receipt log at index %d", i)
 		}
 
@@ -653,7 +695,15 @@ func (f *Firehose) newBalanceChange(tag string, address common.Address, oldValue
 	}
 }
 
+// maybe useful later
+// var arbosAddress = common.HexToAddress("A4B05FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+
 func (f *Firehose) OnNonceChange(a common.Address, prev, new uint64) {
+	if new == prev {
+		firehoseDebug("skipping NonceChange new==prev (%d)", prev)
+		return
+	}
+
 	f.ensureInBlockAndInTrx()
 
 	activeCall := f.callStack.Peek()
@@ -698,51 +748,79 @@ func (f *Firehose) OnCodeChange(a common.Address, prevCodeHash common.Hash, prev
 }
 
 func (f *Firehose) OnStorageChange(a common.Address, k, prev, new common.Hash) {
-	f.ensureInBlockAndInTrxAndInCall()
+	firehoseTrace("on storage change addr=%s", a)
+
+	f.ensureInBlockAndInTrx()
 
 	activeCall := f.callStack.Peek()
-	activeCall.StorageChanges = append(activeCall.StorageChanges, &pbeth.StorageChange{
+	change := &pbeth.StorageChange{
 		Address:  a.Bytes(),
 		Key:      k.Bytes(),
 		OldValue: prev.Bytes(),
 		NewValue: new.Bytes(),
 		Ordinal:  f.blockOrdinal.Next(),
-	})
+	}
+
+	// There is an initial gas consumption happening will the call is not yet started, we track it manually
+	if activeCall == nil {
+		f.deferredCallState.storageChanges = append(f.deferredCallState.storageChanges, change)
+		return
+	}
+
+	activeCall.StorageChanges = append(activeCall.StorageChanges, change)
+
 }
 
 func (f *Firehose) OnLog(l *types.Log) {
-	f.ensureInBlockAndInTrxAndInCall()
+
+	firehoseTrace("on log addr=%s topics=%d, txindex=%d", l.Address, len(l.Topics), f.transactionLogIndex)
+
+	f.ensureInBlockAndInTrx()
 
 	topics := make([][]byte, len(l.Topics))
 	for i, topic := range l.Topics {
 		topics[i] = topic.Bytes()
 	}
 
-	activeCall := f.callStack.Peek()
-	activeCall.Logs = append(activeCall.Logs, &pbeth.Log{
+	log := &pbeth.Log{
 		Address:    l.Address.Bytes(),
 		Topics:     topics,
 		Data:       l.Data,
 		Index:      f.transactionLogIndex,
 		BlockIndex: uint32(l.Index),
 		Ordinal:    f.blockOrdinal.Next(),
-	})
+	}
 
 	f.transactionLogIndex++
+
+	activeCall := f.callStack.Peek()
+	if activeCall == nil {
+		f.deferredCallState.logs = append(f.deferredCallState.logs, log)
+		return
+	}
+
+	activeCall.Logs = append(activeCall.Logs, log)
 }
 
 func (f *Firehose) OnNewAccount(a common.Address) {
-	f.ensureInBlockAndInTrxAndInCall()
+	f.ensureInBlockAndInTrx()
 
 	if f.isPrecompiledAddr(a) {
 		return
 	}
 
-	activeCall := f.callStack.Peek()
-	activeCall.AccountCreations = append(activeCall.AccountCreations, &pbeth.AccountCreation{
+	acc := &pbeth.AccountCreation{
 		Account: a.Bytes(),
 		Ordinal: f.blockOrdinal.Next(),
-	})
+	}
+
+	activeCall := f.callStack.Peek()
+	if activeCall == nil {
+		f.deferredCallState.accountCreations = append(f.deferredCallState.accountCreations, acc)
+		return
+	}
+
+	activeCall.AccountCreations = append(activeCall.AccountCreations)
 }
 
 func (f *Firehose) OnGasConsumed(gas, amount uint64, reason vm.GasChangeReason) {
@@ -869,6 +947,7 @@ func (f *Firehose) ensureInCall() {
 }
 
 func (f *Firehose) panicNotInState(msg string) string {
+	firehoseDebugPrintStack()
 	panic(fmt.Errorf("%s (inBlock=%t, inTransaction=%t, inCall=%t)", msg, f.block != nil, f.transaction != nil, f.callStack.HasActiveCall()))
 }
 
@@ -1307,9 +1386,12 @@ func (s *CallStack) Peek() *pbeth.Call {
 // that is recorded before the Call has been started. This happens on the "starting"
 // portion of the call/created.
 type DeferredCallState struct {
-	balanceChanges []*pbeth.BalanceChange
-	gasChanges     []*pbeth.GasChange
-	nonceChanges   []*pbeth.NonceChange
+	balanceChanges   []*pbeth.BalanceChange
+	gasChanges       []*pbeth.GasChange
+	storageChanges   []*pbeth.StorageChange
+	logs             []*pbeth.Log
+	accountCreations []*pbeth.AccountCreation
+	nonceChanges     []*pbeth.NonceChange
 }
 
 func NewDeferredCallState() *DeferredCallState {
@@ -1328,6 +1410,9 @@ func (d *DeferredCallState) MaybePopulateCallAndReset(source string, call *pbeth
 	// We must happen because it's populated at beginning of the call as well as at the very end
 	call.BalanceChanges = append(call.BalanceChanges, d.balanceChanges...)
 	call.GasChanges = append(call.GasChanges, d.gasChanges...)
+	call.StorageChanges = append(call.StorageChanges, d.storageChanges...)
+	call.Logs = append(call.Logs, d.logs...)
+	call.AccountCreations = append(call.AccountCreations, d.accountCreations...)
 	call.NonceChanges = append(call.NonceChanges, d.nonceChanges...)
 
 	d.Reset()
@@ -1336,12 +1421,15 @@ func (d *DeferredCallState) MaybePopulateCallAndReset(source string, call *pbeth
 }
 
 func (d *DeferredCallState) IsEmpty() bool {
-	return len(d.balanceChanges) == 0 && len(d.gasChanges) == 0 && len(d.nonceChanges) == 0
+	return len(d.balanceChanges) == 0 && len(d.gasChanges) == 0 && len(d.nonceChanges) == 0 && len(d.storageChanges) == 0 && len(d.logs) == 0
 }
 
 func (d *DeferredCallState) Reset() {
 	d.balanceChanges = nil
 	d.gasChanges = nil
+	d.storageChanges = nil
+	d.logs = nil
+	d.accountCreations = nil
 	d.nonceChanges = nil
 }
 

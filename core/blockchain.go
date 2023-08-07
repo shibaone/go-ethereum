@@ -172,6 +172,8 @@ type BlockchainLogger interface {
 	// `td` is the total difficulty prior to `block`.
 	OnBlockStart(block *types.Block, td *big.Int, finalized *types.Header, safe *types.Header)
 	OnBlockEnd(err error)
+	// OnBlockUpdate is called when a block header was modified after the OnBlockStart. This happens when mining, but also on some Layer2
+	OnBlockUpdate(block *types.Block, td *big.Int)
 	OnGenesisBlock(genesis *types.Block, alloc GenesisAlloc)
 }
 
