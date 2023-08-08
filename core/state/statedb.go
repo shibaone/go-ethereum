@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -872,6 +874,10 @@ func (s *StateDB) Snapshot() int {
 
 // RevertToSnapshot reverts all state changes made since the given revision.
 func (s *StateDB) RevertToSnapshot(revid int) {
+
+	if os.Getenv("GETH_FIREHOSE_TRACER_LOG_LEVEL") == "trace" {
+		debug.PrintStack()
+	}
 	// Find the snapshot in the stack of valid snapshots.
 	idx := sort.Search(len(s.validRevisions), func(i int) bool {
 		return s.validRevisions[i].id >= revid
