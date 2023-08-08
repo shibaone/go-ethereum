@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers/directory"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/streamingfast/eth-go"
 	pbeth "github.com/streamingfast/firehose-ethereum/types/pb/sf/ethereum/type/v2"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -227,10 +228,18 @@ func (f *Firehose) captureTxStart(tx *types.Transaction, hash common.Hash, from,
 }
 
 func (f *Firehose) CaptureTxEnd(receipt *types.Receipt, err error) {
-	firehoseDebug("trx ending")
+	firehoseDebug("trx ending, err=%s", errorView(err), ctxView(f))
 	f.ensureInBlockAndInTrx()
 
-	f.block.TransactionTraces = append(f.block.TransactionTraces, f.completeTransaction(receipt))
+	if receipt != nil {
+		switch receipt.Type {
+		case types.ArbitrumDepositTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType:
+			firehoseDebug("Closing simulated root call to arbitrum tx type=%d", receipt.Type)
+			f.callEnd("root", nil, receipt.GasUsed, err)
+		}
+
+		f.block.TransactionTraces = append(f.block.TransactionTraces, f.completeTransaction(receipt))
+	}
 
 	// The reset must be done as the very last thing as the CallStack needs to be
 	// properly populated for the `completeTransaction` call above to complete correctly.
@@ -1409,6 +1418,31 @@ func (d *DeferredCallState) Reset() {
 	d.balanceChanges = nil
 	d.gasChanges = nil
 	d.nonceChanges = nil
+}
+
+func ctxView(f *Firehose) _ctxView {
+	return _ctxView{f}
+}
+
+type _ctxView struct {
+	f *Firehose
+}
+
+func (v _ctxView) String() string {
+	if v.f == nil {
+		return "no firehose"
+	}
+	blk := "<no block>"
+	if v.f.block != nil {
+		blk = v.f.block.AsRef().String()
+	}
+
+	trx := "<no trx>"
+	if v.f.transaction != nil {
+		trx = eth.Hash(v.f.transaction.Hash).Pretty()
+	}
+
+	return fmt.Sprintf("ctx=[%s, %s]", blk, trx)
 }
 
 func errorView(err error) _errorView {
