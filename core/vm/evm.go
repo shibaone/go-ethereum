@@ -345,7 +345,7 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 // code with the caller as context and the caller is set to the caller of the caller.
 func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 	// Invoke tracer hooks that signal entering/exiting a call frame
-	if evm.Config.Debug {
+	if evm.Config.Tracer != nil {
 		// NOTE: caller must, at all times be a contract. It should never happen
 		// that caller is something other than a Contract.
 		parent := caller.(*Contract)

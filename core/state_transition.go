@@ -275,7 +275,7 @@ func (st *StateTransition) buyGas() error {
 	st.state.SubBalance(st.msg.From, mgval, state.BalanceChangeGasBuy)
 
 	// Arbitrum: record fee payment
-	if st.evm.Config.Debug {
+	if st.evm.Config.Tracer != nil {
 		st.evm.Config.Tracer.CaptureArbitrumTransfer(st.evm, &st.msg.From, nil, mgval, true, "feePayment")
 	}
 
@@ -455,14 +455,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 
 	// Arbitrum: record the tip
-	if st.evm.Config.Debug && !st.evm.ProcessingHook.DropTip() {
+	if st.evm.Config.Tracer != nil && !st.evm.ProcessingHook.DropTip() {
 		st.evm.Config.Tracer.CaptureArbitrumTransfer(st.evm, nil, &tipReceipient, tipAmount, false, "tip")
 	}
 
 	st.evm.ProcessingHook.EndTxHook(st.gasRemaining, vmerr == nil)
 
 	// Arbitrum: record self destructs
-	if st.evm.Config.Debug {
+	if st.evm.Config.Tracer != nil {
 		suicides := st.evm.StateDB.GetSuicides()
 		for i, address := range suicides {
 			balance := st.evm.StateDB.GetBalance(address)
@@ -500,10 +500,8 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 	st.state.AddBalance(st.msg.From, remaining, state.BalanceChangeGasRefund)
 
 	// Arbitrum: record the gas refund
-	if st.evm.Config.Debug {
-		st.evm.Config.Tracer.CaptureArbitrumTransfer(st.evm, nil, &st.msg.From, remaining, false, "gasRefund")
-	}
 	if st.evm.Config.Tracer != nil {
+		st.evm.Config.Tracer.CaptureArbitrumTransfer(st.evm, nil, &st.msg.From, remaining, false, "gasRefund")
 		st.evm.Config.Tracer.OnGasConsumed(st.gasRemaining, st.gasRemaining, vm.GasBuyBack)
 	}
 
