@@ -575,7 +575,6 @@ func (f *Firehose) callEnd(source string, output []byte, gasUsed uint64, err err
 		// We also treat ErrInsufficientBalance and ErrDepth as reverted in Firehose model
 		// because they do not cost any gas.
 		call.StatusReverted = errors.Is(err, vm.ErrExecutionReverted) || errors.Is(err, vm.ErrInsufficientBalance) || errors.Is(err, vm.ErrDepth)
-		firehoseTrace("call returned error, err=%s, statusReverted=%t, statusFailed=%t", err.Error(), call.StatusReverted, call.StatusFailed)
 	}
 
 	// Known Firehose issue: The EndOrdinal of the genesis block root call is never actually
