@@ -67,7 +67,6 @@ type Firehose struct {
 }
 
 func NewFirehoseLogger() *Firehose {
-	// FIXME: Where should we put our actual INIT line?
 	// FIXME: Pickup version from go-ethereum (PR comment)
 	printToFirehose("INIT", "2.3", "geth", "1.12.0")
 
@@ -861,15 +860,15 @@ func (f *Firehose) OnGasConsumed(gas, amount uint64, reason vm.GasChangeReason) 
 }
 
 func (f *Firehose) CaptureArbitrumTransfer(env *vm.EVM, from, to *common.Address, value *big.Int, before bool, purpose string) {
-	// FIXME
+	// transfers for this are caught through OnBalanceChange, etc.
 }
 
 func (f *Firehose) CaptureArbitrumStorageGet(key common.Hash, depth int, before bool) {
-	// FIXME
+	// nothing interesting for firehose here
 }
 
 func (f *Firehose) CaptureArbitrumStorageSet(key, value common.Hash, depth int, before bool) {
-	// FIXME
+	// nothing interesting for firehose here
 }
 
 func (f *Firehose) newGasChange(tag string, oldValue, newValue uint64, reason pbeth.GasChange_Reason) *pbeth.GasChange {
@@ -1062,9 +1061,20 @@ func transactionTypeFromChainTxType(txType uint8) pbeth.TransactionTrace_Type {
 		return pbeth.TransactionTrace_TRX_TYPE_DYNAMIC_FEE
 	case types.LegacyTxType:
 		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
-		// FIXME stepd
-	case types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
-		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
+	case types.ArbitrumDepositTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_DEPOSIT
+	case types.ArbitrumUnsignedTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_UNSIGNED
+	case types.ArbitrumContractTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_CONTRACT
+	case types.ArbitrumRetryTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_RETRY
+	case types.ArbitrumSubmitRetryableTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_SUBMIT_RETRYABLE
+	case types.ArbitrumInternalTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_INTERNAL
+	case types.ArbitrumLegacyTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_LEGACY
 
 	default:
 		panic(fmt.Errorf("unknown transaction type %d", txType))
