@@ -172,9 +172,13 @@ func (ctx *Context) EndBlock(block *types.Block, finalBlockHeader *types.Header,
 		"totalDifficulty": (*hexutil.Big)(totalDifficulty),
 	}
 
-	if finalBlockHeader != nil && finalBlockHeader.Number.Uint64() != 0 {
-		endData["finalizedBlockNum"] = (*hexutil.Big)(finalBlockHeader.Number)
-		endData["finalizedBlockHash"] = finalBlockHeader.Hash()
+	if finalBlockHeader != nil {
+		finalNum := finalBlockHeader.Number.Uint64()
+		num := block.NumberU64()
+		if finalNum != 0 && num > finalNum && (num-finalNum < 200) { // workaround: if finalBlockHeader is more than 200 blocks away, we don't advertise it
+			endData["finalizedBlockNum"] = (*hexutil.Big)(finalBlockHeader.Number)
+			endData["finalizedBlockHash"] = finalBlockHeader.Hash()
+		}
 	}
 
 	ctx.printer.Print("END_BLOCK",
