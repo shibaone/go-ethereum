@@ -1995,7 +1995,25 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				firehoseContext.FinalizeBlock(block)
 				ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 				td := new(big.Int).Add(block.Difficulty(), ptd)
-				firehoseContext.EndBlock(block, bc.CurrentFinalBlock(), td)
+
+				currentFinalBlock := bc.CurrentFinalBlock()
+				if currentFinalBlock != nil && currentFinalBlock.Number.Uint64() >= block.Number().Uint64() {
+					canonical := bc.GetBlockByNumber(block.NumberU64())
+					if canonical != nil && canonical.Hash() == block.Hash() {
+						firehoseContext.EndBlock(block, currentFinalBlock, td)
+					} else {
+						log.Warn("Skipping currentFinalBlock on firehose EndBlock (in skipBlock() condition) because we are processing an old block",
+							"block_num", block.Number().Uint64(),
+							"block_hash", block.Hash(),
+							"final_block_num", currentFinalBlock.Number.Uint64(),
+							"final_block_hash", currentFinalBlock.Hash(),
+						)
+						firehoseContext.EndBlock(block, nil, td)
+					}
+				} else {
+					firehoseContext.EndBlock(block, currentFinalBlock, td)
+				}
+
 			}
 
 			stats.processed++
@@ -2079,7 +2097,24 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			// Calculate the total difficulty of the block
 			ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 			td := new(big.Int).Add(block.Difficulty(), ptd)
-			firehoseContext.EndBlock(block, bc.CurrentFinalBlock(), td)
+			currentFinalBlock := bc.CurrentFinalBlock()
+			if currentFinalBlock != nil && currentFinalBlock.Number.Uint64() >= block.Number().Uint64() {
+				canonical := bc.GetBlockByNumber(block.NumberU64())
+				if canonical != nil && canonical.Hash() == block.Hash() {
+					firehoseContext.EndBlock(block, currentFinalBlock, td)
+				} else {
+					log.Warn("Skipping currentFinalBlock on firehose EndBlock because we are processing an old block",
+						"block_num", block.Number().Uint64(),
+						"block_hash", block.Hash(),
+						"final_block_num", currentFinalBlock.Number.Uint64(),
+						"final_block_hash", currentFinalBlock.Hash(),
+					)
+					firehoseContext.EndBlock(block, nil, td)
+				}
+			} else {
+				firehoseContext.EndBlock(block, currentFinalBlock, td)
+			}
+
 		}
 
 		bc.cacheReceipts(block.Hash(), receipts)
