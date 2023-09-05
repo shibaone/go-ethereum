@@ -542,7 +542,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (ty
 		go func() {
 			firehoseContext := firehose.NoOpContext
 			if firehose.Enabled {
-				firehoseContext = firehose.NewSpeculativeExecutionContext(50 * 1024 * 1024)
+				firehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.ParallelBlockSyncBuffer)
 			}
 
 			parallelStatedb.StartPrefetcher("chain")
@@ -564,7 +564,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (ty
 
 			firehoseContext := firehose.NoOpContext
 			if firehose.Enabled {
-				firehoseContext = firehose.NewSpeculativeExecutionContext(50 * 1024 * 1024)
+				firehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.BlockSyncBuffer)
 			}
 
 			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx, firehoseContext)
@@ -1954,7 +1954,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			}
 		}
 
-		// Process block using the parent state as reference point
 		substart := time.Now()
 		receipts, logs, usedGas, statedb, firehoseContext, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
@@ -2018,6 +2017,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		if err != nil {
 			return it.index, err
 		}
+
+		if firehoseContext.Enabled() {
+			// This is last point where there is no more an early return due to an error, we flush here
+			firehoseContext.FlushBlock()
+		}
+
 		// Update the metrics touched during block commit
 		accountCommitTimer.Update(statedb.AccountCommits)   // Account commits are complete, we can mark them
 		storageCommitTimer.Update(statedb.StorageCommits)   // Storage commits are complete, we can mark them

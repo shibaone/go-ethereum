@@ -81,6 +81,15 @@ func NewToBufferPrinter(initialAllocationSizeInBytes int) *ToBufferPrinter {
 	}
 }
 
+func NewToBufferPrinterWithBuffer(buffer *bytes.Buffer) *ToBufferPrinter {
+	// Force a reset to ensure we start with a clean buffer
+	buffer.Reset()
+
+	return &ToBufferPrinter{
+		buffer: buffer,
+	}
+}
+
 func (p *ToBufferPrinter) Reset() {
 	p.buffer.Reset()
 }

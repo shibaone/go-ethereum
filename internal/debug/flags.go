@@ -225,6 +225,10 @@ func Setup(ctx *cli.Context, genesis *core.Genesis) error {
 	firehose.MiningEnabled = ctx.GlobalBool(firehoseMiningEnabledFlag.Name)
 	firehose.BlockProgressEnabled = ctx.GlobalBool(firehoseBlockProgressFlag.Name)
 
+	if firehose.Enabled {
+		firehose.Init()
+	}
+
 	genesisProvenance := "unset"
 
 	if genesis != nil {

@@ -1,6 +1,7 @@
 package firehose
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -21,7 +22,7 @@ import (
 // NoOpContext can be used when no recording should happen for a given code path
 var NoOpContext *Context
 
-var syncContext *Context = NewContext(&DelegateToWriterPrinter{writer: os.Stdout})
+var syncContext *Context = NewContext(&DelegateToWriterPrinter{writer: os.Stdout}, false)
 
 // MaybeSyncContext is used when syncing blocks with the network for mindreader consumption, there
 // is always a single active sync context use for the whole syncing process, should not be used
@@ -48,11 +49,11 @@ func SyncContext() *Context {
 	return syncContext
 }
 
-func NewContext(printer Printer) *Context {
+func NewContext(printer Printer, speculative bool) *Context {
 	ctx := &Context{
 		printer: printer,
 
-		seenBlock:            atomic.NewBool(false),
+		isSpeculativeContext: speculative,
 		inBlock:              atomic.NewBool(false),
 		inTransaction:        atomic.NewBool(false),
 		totalOrderingCounter: atomic.NewUint64(0),
@@ -72,8 +73,8 @@ type Context struct {
 	printer Printer
 
 	// Global state
-	seenBlock   *atomic.Bool
-	flushTxLock sync.Mutex
+	isSpeculativeContext bool
+	flushTxLock          sync.Mutex
 
 	// Block state
 	inBlock                   *atomic.Bool
@@ -113,7 +114,12 @@ func (ctx *Context) InitVersion(nodeVersion, dmVersion, variant string) {
 }
 
 func NewSpeculativeExecutionContext(initialAllocationInBytes int) *Context {
-	return NewContext(NewToBufferPrinter(initialAllocationInBytes))
+	return NewContext(NewToBufferPrinter(initialAllocationInBytes), true)
+}
+
+// NewSpeculativeExecutionContextWithBuffer takes a buffer and cleans it before usage
+func NewSpeculativeExecutionContextWithBuffer(buffer *bytes.Buffer) *Context {
+	return NewContext(NewToBufferPrinterWithBuffer(buffer), true)
 }
 
 func (ctx *Context) Enabled() bool {
@@ -160,8 +166,6 @@ func (ctx *Context) StartBlock(block *types.Block) {
 		panic("entering a block while already in a block scope")
 	}
 
-	ctx.seenBlock.Store(true)
-
 	ctx.printer.Print("BEGIN_BLOCK", Uint64(block.NumberU64()))
 }
 
@@ -193,6 +197,8 @@ func (ctx *Context) FlushBlock() {
 		return
 	}
 
+	// We flush to stdout only if the received `ctx` accumulated all the Firehose
+	// logs in a buffer. Other context already flushed to stdout.
 	if v, ok := ctx.printer.(*ToBufferPrinter); ok {
 		syncContext.printer.Write(v.buffer.Bytes())
 	}
@@ -462,7 +468,6 @@ func (ctx *Context) StartCall(callType string) {
 		ctx.openCall(),
 		Uint64(ctx.totalOrderingCounter.Inc()),
 	)
-
 }
 
 func (ctx *Context) openCall() string {
@@ -475,9 +480,9 @@ func (ctx *Context) openCall() string {
 }
 
 func (ctx *Context) callIndex() string {
-	if !ctx.inTransaction.Load() {
+	if !ctx.isSpeculativeContext && !ctx.inBlock.Load() {
 		debug.PrintStack()
-		panic("should have been call in a transaction, something is deeply wrong")
+		panic("should have been call in a block or in speculative context, something is deeply wrong")
 	}
 
 	return ctx.activeCallIndex

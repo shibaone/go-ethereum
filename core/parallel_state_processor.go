@@ -106,7 +106,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(task.msg)
-	evm.Reset(txContext, task.statedb)
+	evm.Reset(txContext, task.statedb, task.txFirehoseContext)
 	task.txFirehoseContext.Reset()
 
 	defer func() {

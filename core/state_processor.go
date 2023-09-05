@@ -77,13 +77,14 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb, firehoseContext)
 	}
-	blockContext := NewEVMBlockContext(header, p.bc, nil)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg, firehoseContext)
+
 	txFirehoseContext := firehoseContext
 	if txFirehoseContext.Enabled() {
-		// 5 MiB should hold enough for all transaction and it's re-used for all transactions so shouldn't be a big deal for the memory
-		txFirehoseContext = firehose.NewSpeculativeExecutionContext(5 * 1024 * 1024)
+		txFirehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.TxSyncBuffer)
 	}
+
+	blockContext := NewEVMBlockContext(header, p.bc, nil)
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg, txFirehoseContext)
 
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
@@ -143,13 +144,13 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 // nolint : unparam
-func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, interruptCtx context.Context, firehoseContext *firehose.Context) (*types.Receipt, error) {
+func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, interruptCtx context.Context, txFirehoseContext *firehose.Context) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
-	evm.Reset(txContext, statedb)
+	evm.Reset(txContext, statedb, txFirehoseContext)
 
 	// We need to set it back because each transaction executes in the EVM with it's own context
-	evm.SetFirehoseContext(firehoseContext)
+	evm.SetFirehoseContext(txFirehoseContext)
 
 	var result *ExecutionResult
 
@@ -174,10 +175,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	statedb.SetMVHashmap(nil)
 
 	if evm.ChainConfig().IsLondon(blockNumber) {
-		statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt, false, firehoseContext, firehose.BalanceChangeReason("burn"))
+		statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt, false, txFirehoseContext, firehose.BalanceChangeReason("burn"))
 	}
 
-	statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped, false, firehoseContext, firehose.BalanceChangeReason("reward_transaction_fee"))
+	statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped, false, txFirehoseContext, firehose.BalanceChangeReason("reward_transaction_fee"))
 	output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
 	output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
 
@@ -195,7 +196,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		output1.Sub(output1, result.FeeTipped),
 		output2.Add(output2, result.FeeTipped),
 
-		firehoseContext,
+		txFirehoseContext,
 	)
 
 	if result.Err == vm.ErrInterrupt {
@@ -248,6 +249,5 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg, firehoseContext)
-
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv, interruptCtx, firehoseContext)
 }
