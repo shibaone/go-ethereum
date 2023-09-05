@@ -1994,7 +1994,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 			td := new(big.Int).Add(block.Difficulty(), ptd)
 			firehoseContext.EndBlock(block, td)
-			firehoseContext.FlushBlock()
 		}
 
 		proctime := time.Since(start)
