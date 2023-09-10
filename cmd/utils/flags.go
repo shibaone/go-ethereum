@@ -1832,7 +1832,7 @@ func CheckExclusive(ctx *cli.Context, args ...interface{}) {
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Avoid conflicting network flags
-	CheckExclusive(ctx, MainnetFlag, DeveloperFlag, GoerliFlag, SepoliaFlag, BattlefieldFlag)
+	CheckExclusive(ctx, MainnetFlag, BorMainnetFlag, MumbaiFlag, DeveloperFlag, GoerliFlag, SepoliaFlag, BattlefieldFlag)
 	CheckExclusive(ctx, LightServeFlag, SyncModeFlag, "light")
 	CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 
@@ -2021,6 +2021,23 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 
 		cfg.Genesis = core.DefaultBattlefieldGenesisBlock()
+
+	case ctx.Bool(BorMainnetFlag.Name):
+		if !ctx.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 137
+		}
+
+		cfg.Genesis = core.DefaultBorMainnetGenesisBlock()
+		SetDNSDiscoveryDefaults(cfg, params.BorMainnetGenesisHash)
+
+	case ctx.Bool(MumbaiFlag.Name):
+		if !ctx.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 80001
+		}
+
+		cfg.Genesis = core.DefaultMumbaiGenesisBlock()
+		SetDNSDiscoveryDefaults(cfg, params.MumbaiGenesisHash)
+
 	case ctx.Bool(DeveloperFlag.Name):
 		if !ctx.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1337

@@ -331,6 +331,7 @@ func prepare(ctx *cli.Context) {
 		// Make sure we're not on any supported preconfigured testnet either
 		if !ctx.IsSet(utils.SepoliaFlag.Name) &&
 			!ctx.IsSet(utils.GoerliFlag.Name) &&
+			!ctx.IsSet(utils.BorMainnetFlag.Name) &&
 			!ctx.IsSet(utils.MumbaiFlag.Name) &&
 			!ctx.IsSet(utils.BattlefieldFlag.Name) &&
 			!ctx.IsSet(utils.DeveloperFlag.Name) {
