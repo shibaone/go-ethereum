@@ -30,8 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/bn256"
 	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/params"
-
-	big2 "github.com/holiman/big"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -118,12 +116,15 @@ func init() {
 	for k := range PrecompiledContractsHomestead {
 		PrecompiledAddressesHomestead = append(PrecompiledAddressesHomestead, k)
 	}
+
 	for k := range PrecompiledContractsByzantium {
 		PrecompiledAddressesByzantium = append(PrecompiledAddressesByzantium, k)
 	}
+
 	for k := range PrecompiledContractsIstanbul {
 		PrecompiledAddressesIstanbul = append(PrecompiledAddressesIstanbul, k)
 	}
+
 	for k := range PrecompiledContractsBerlin {
 		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
 	}
@@ -160,6 +161,7 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uin
 
 	suppliedGas -= gasCost
 	output, err := p.Run(input)
+
 	return output, suppliedGas, err
 }
 
@@ -229,6 +231,7 @@ func (c *ripemd160hash) RequiredGas(input []byte) uint64 {
 func (c *ripemd160hash) Run(input []byte) ([]byte, error) {
 	ripemd := ripemd160.New()
 	ripemd.Write(input)
+
 	return common.LeftPadBytes(ripemd.Sum(nil), 32), nil
 }
 
@@ -243,7 +246,7 @@ func (c *dataCopy) RequiredGas(input []byte) uint64 {
 	return uint64(len(input)+31)/32*params.IdentityPerWordGas + params.IdentityBaseGas
 }
 func (c *dataCopy) Run(in []byte) ([]byte, error) {
-	return in, nil
+	return common.CopyBytes(in), nil
 }
 
 // bigModExp implements a native big integer exponential modular operation.
@@ -272,11 +275,10 @@ var (
 // nolint: gofmt
 // modexpMultComplexity implements bigModexp multComplexity formula, as defined in EIP-198
 //
-// def mult_complexity(x):
-//
-//	if x <= 64: return x ** 2
-//	elif x <= 1024: return x ** 2 // 4 + 96 * x - 3072
-//	else: return x ** 2 // 16 + 480 * x - 199680
+//	def mult_complexity(x):
+//		if x <= 64: return x ** 2
+//		elif x <= 1024: return x ** 2 // 4 + 96 * x - 3072
+//		else: return x ** 2 // 16 + 480 * x - 199680
 //
 // where is x is max(length_of_MODULUS, length_of_BASE)
 func modexpMultComplexity(x *big.Int) *big.Int {
@@ -296,6 +298,7 @@ func modexpMultComplexity(x *big.Int) *big.Int {
 			new(big.Int).Sub(new(big.Int).Mul(big480, x), big199680),
 		)
 	}
+
 	return x
 }
 
@@ -306,6 +309,7 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 		expLen  = new(big.Int).SetBytes(getData(input, 32, 32))
 		modLen  = new(big.Int).SetBytes(getData(input, 64, 32))
 	)
+
 	if len(input) > 96 {
 		input = input[96:]
 	} else {
@@ -327,11 +331,13 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 	if bitlen := expHead.BitLen(); bitlen > 0 {
 		msb = bitlen - 1
 	}
+
 	adjExpLen := new(big.Int)
 	if expLen.Cmp(big32) > 0 {
 		adjExpLen.Sub(expLen, big32)
 		adjExpLen.Mul(big8, adjExpLen)
 	}
+
 	adjExpLen.Add(adjExpLen, big.NewInt(int64(msb)))
 	// Calculate the gas cost of the operation
 	gas := new(big.Int).Set(math.BigMax(modLen, baseLen))
@@ -351,6 +357,7 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 		gas.Mul(gas, math.BigMax(adjExpLen, big1))
 		// 2. Different divisor (`GQUADDIVISOR`) (3)
 		gas.Div(gas, big3)
+
 		if gas.BitLen() > 64 {
 			return math.MaxUint64
 		}
@@ -358,8 +365,10 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 		if gas.Uint64() < 200 {
 			return 200
 		}
+
 		return gas.Uint64()
 	}
+
 	gas = modexpMultComplexity(gas)
 	gas.Mul(gas, math.BigMax(adjExpLen, big1))
 	gas.Div(gas, big20)
@@ -367,6 +376,7 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 	if gas.BitLen() > 64 {
 		return math.MaxUint64
 	}
+
 	return gas.Uint64()
 }
 
@@ -376,6 +386,7 @@ func (c *bigModExp) Run(input []byte) ([]byte, error) {
 		expLen  = new(big.Int).SetBytes(getData(input, 32, 32)).Uint64()
 		modLen  = new(big.Int).SetBytes(getData(input, 64, 32)).Uint64()
 	)
+
 	if len(input) > 96 {
 		input = input[96:]
 	} else {
@@ -387,9 +398,9 @@ func (c *bigModExp) Run(input []byte) ([]byte, error) {
 	}
 	// Retrieve the operands and execute the exponentiation
 	var (
-		base = new(big2.Int).SetBytes(getData(input, 0, baseLen))
-		exp  = new(big2.Int).SetBytes(getData(input, baseLen, expLen))
-		mod  = new(big2.Int).SetBytes(getData(input, baseLen+expLen, modLen))
+		base = new(big.Int).SetBytes(getData(input, 0, baseLen))
+		exp  = new(big.Int).SetBytes(getData(input, baseLen, expLen))
+		mod  = new(big.Int).SetBytes(getData(input, baseLen+expLen, modLen))
 		v    []byte
 	)
 
@@ -414,6 +425,7 @@ func newCurvePoint(blob []byte) (*bn256.G1, error) {
 	if _, err := p.Unmarshal(blob); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
@@ -424,6 +436,7 @@ func newTwistPoint(blob []byte) (*bn256.G2, error) {
 	if _, err := p.Unmarshal(blob); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
@@ -434,12 +447,15 @@ func runBn256Add(input []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	y, err := newCurvePoint(getData(input, 64, 64))
 	if err != nil {
 		return nil, err
 	}
+
 	res := new(bn256.G1)
 	res.Add(x, y)
+
 	return res.Marshal(), nil
 }
 
@@ -476,8 +492,10 @@ func runBn256ScalarMul(input []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	res := new(bn256.G1)
 	res.ScalarMult(p, new(big.Int).SetBytes(getData(input, 64, 32)))
+
 	return res.Marshal(), nil
 }
 
@@ -530,15 +548,18 @@ func runBn256Pairing(input []byte) ([]byte, error) {
 		cs []*bn256.G1
 		ts []*bn256.G2
 	)
+
 	for i := 0; i < len(input); i += 192 {
 		c, err := newCurvePoint(input[i : i+64])
 		if err != nil {
 			return nil, err
 		}
+
 		t, err := newTwistPoint(input[i+64 : i+192])
 		if err != nil {
 			return nil, err
 		}
+
 		cs = append(cs, c)
 		ts = append(ts, t)
 	}
@@ -546,6 +567,7 @@ func runBn256Pairing(input []byte) ([]byte, error) {
 	if bn256.PairingCheck(cs, ts) {
 		return true32Byte, nil
 	}
+
 	return false32Byte, nil
 }
 
@@ -583,6 +605,7 @@ func (c *blake2F) RequiredGas(input []byte) uint64 {
 	if len(input) != blake2FInputLength {
 		return 0
 	}
+
 	return uint64(binary.BigEndian.Uint32(input[0:4]))
 }
 
@@ -602,26 +625,30 @@ func (c *blake2F) Run(input []byte) ([]byte, error) {
 	if len(input) != blake2FInputLength {
 		return nil, errBlake2FInvalidInputLength
 	}
+
 	if input[212] != blake2FNonFinalBlockBytes && input[212] != blake2FFinalBlockBytes {
 		return nil, errBlake2FInvalidFinalFlag
 	}
 	// Parse the input into the Blake2b call parameters
 	var (
 		rounds = binary.BigEndian.Uint32(input[0:4])
-		final  = (input[212] == blake2FFinalBlockBytes)
+		final  = input[212] == blake2FFinalBlockBytes
 
 		h [8]uint64
 		m [16]uint64
 		t [2]uint64
 	)
+
 	for i := 0; i < 8; i++ {
 		offset := 4 + i*8
 		h[i] = binary.LittleEndian.Uint64(input[offset : offset+8])
 	}
+
 	for i := 0; i < 16; i++ {
 		offset := 68 + i*8
 		m[i] = binary.LittleEndian.Uint64(input[offset : offset+8])
 	}
+
 	t[0] = binary.LittleEndian.Uint64(input[196:204])
 	t[1] = binary.LittleEndian.Uint64(input[204:212])
 
@@ -629,10 +656,12 @@ func (c *blake2F) Run(input []byte) ([]byte, error) {
 	blake2b.F(&h, m, t, final, rounds)
 
 	output := make([]byte, 64)
+
 	for i := 0; i < 8; i++ {
 		offset := i * 8
 		binary.LittleEndian.PutUint64(output[offset:offset+8], h[i])
 	}
+
 	return output, nil
 }
 
@@ -658,7 +687,9 @@ func (c *bls12381G1Add) Run(input []byte) ([]byte, error) {
 	if len(input) != 256 {
 		return nil, errBLS12381InvalidInputLength
 	}
+
 	var err error
+
 	var p0, p1 *bls12381.PointG1
 
 	// Initialize G1
@@ -696,7 +727,9 @@ func (c *bls12381G1Mul) Run(input []byte) ([]byte, error) {
 	if len(input) != 160 {
 		return nil, errBLS12381InvalidInputLength
 	}
+
 	var err error
+
 	var p0 *bls12381.PointG1
 
 	// Initialize G1
@@ -744,10 +777,13 @@ func (c *bls12381G1MultiExp) Run(input []byte) ([]byte, error) {
 	// G1 multiplication call expects `160*k` bytes as an input that is interpreted as byte concatenation of `k` slices each of them being a byte concatenation of encoding of G1 point (`128` bytes) and encoding of a scalar value (`32` bytes).
 	// Output is an encoding of multiexponentiation operation result - single G1 point (`128` bytes).
 	k := len(input) / 160
+
 	if len(input) == 0 || len(input)%160 != 0 {
 		return nil, errBLS12381InvalidInputLength
 	}
+
 	var err error
+
 	points := make([]*bls12381.PointG1, k)
 	scalars := make([]*big.Int, k)
 
@@ -789,7 +825,9 @@ func (c *bls12381G2Add) Run(input []byte) ([]byte, error) {
 	if len(input) != 512 {
 		return nil, errBLS12381InvalidInputLength
 	}
+
 	var err error
+
 	var p0, p1 *bls12381.PointG2
 
 	// Initialize G2
@@ -827,7 +865,9 @@ func (c *bls12381G2Mul) Run(input []byte) ([]byte, error) {
 	if len(input) != 288 {
 		return nil, errBLS12381InvalidInputLength
 	}
+
 	var err error
+
 	var p0 *bls12381.PointG2
 
 	// Initialize G2
@@ -875,10 +915,13 @@ func (c *bls12381G2MultiExp) Run(input []byte) ([]byte, error) {
 	// > G2 multiplication call expects `288*k` bytes as an input that is interpreted as byte concatenation of `k` slices each of them being a byte concatenation of encoding of G2 point (`256` bytes) and encoding of a scalar value (`32` bytes).
 	// > Output is an encoding of multiexponentiation operation result - single G2 point (`256` bytes).
 	k := len(input) / 288
+
 	if len(input) == 0 || len(input)%288 != 0 {
 		return nil, errBLS12381InvalidInputLength
 	}
+
 	var err error
+
 	points := make([]*bls12381.PointG2, k)
 	scalars := make([]*big.Int, k)
 
@@ -921,6 +964,7 @@ func (c *bls12381Pairing) Run(input []byte) ([]byte, error) {
 	// > Output is a `32` bytes where last single byte is `0x01` if pairing result is equal to multiplicative identity in a pairing target field and `0x00` otherwise
 	// > (which is equivalent of Big Endian encoding of Solidity values `uint256(1)` and `uin256(0)` respectively).
 	k := len(input) / 384
+
 	if len(input) == 0 || len(input)%384 != 0 {
 		return nil, errBLS12381InvalidInputLength
 	}
@@ -950,11 +994,12 @@ func (c *bls12381Pairing) Run(input []byte) ([]byte, error) {
 		if !g1.InCorrectSubgroup(p1) {
 			return nil, errBLS12381G1PointSubgroup
 		}
+
 		if !g2.InCorrectSubgroup(p2) {
 			return nil, errBLS12381G2PointSubgroup
 		}
 
-		// Update pairing engine with G1 and G2 ponits
+		// Update pairing engine with G1 and G2 points
 		e.AddPair(p1, p2)
 	}
 	// Prepare 32 byte output
@@ -964,6 +1009,7 @@ func (c *bls12381Pairing) Run(input []byte) ([]byte, error) {
 	if e.Check() {
 		out[31] = 1
 	}
+
 	return out, nil
 }
 
@@ -979,8 +1025,10 @@ func decodeBLS12381FieldElement(in []byte) ([]byte, error) {
 			return nil, errBLS12381InvalidFieldElementTopBytes
 		}
 	}
+
 	out := make([]byte, 48)
 	copy(out[:], in[16:])
+
 	return out, nil
 }
 
@@ -1037,15 +1085,19 @@ func (c *bls12381MapG2) Run(input []byte) ([]byte, error) {
 
 	// Decode input field element
 	fe := make([]byte, 96)
+
 	c0, err := decodeBLS12381FieldElement(input[:64])
 	if err != nil {
 		return nil, err
 	}
+
 	copy(fe[48:], c0)
+
 	c1, err := decodeBLS12381FieldElement(input[64:])
 	if err != nil {
 		return nil, err
 	}
+
 	copy(fe[:48], c1)
 
 	// Initialize G2

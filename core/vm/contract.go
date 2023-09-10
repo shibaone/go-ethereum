@@ -96,6 +96,7 @@ func (c *Contract) validJumpdest(dest *uint256.Int) bool {
 	if OpCode(c.Code[udest]) != JUMPDEST {
 		return false
 	}
+
 	return c.isCode(udest)
 }
 
@@ -120,6 +121,7 @@ func (c *Contract) isCode(udest uint64) bool {
 		}
 		// Also stash it in current contract for faster access
 		c.analysis = analysis
+
 		return analysis.codeSegment(udest)
 	}
 	// We don't have the code hash, most likely a piece of initcode not already
@@ -129,6 +131,7 @@ func (c *Contract) isCode(udest uint64) bool {
 	if c.analysis == nil {
 		c.analysis = codeBitmap(c.Code)
 	}
+
 	return c.analysis.codeSegment(udest)
 }
 

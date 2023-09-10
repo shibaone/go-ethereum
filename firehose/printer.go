@@ -178,7 +178,6 @@ func ReportHeaderComparisonResult(actual *types.Header, expected *types.Header) 
 			return x.String()
 		}
 	})
-	compareTxDependency := fieldComparisonReporter(func(x any) string { return fmt.Sprintf("%#v", x) })
 
 	compareHash("Hash", actual.Hash(), expected.Hash())
 	compareUint64("Number", actual.Number.Uint64(), expected.Number.Uint64())
@@ -197,7 +196,6 @@ func ReportHeaderComparisonResult(actual *types.Header, expected *types.Header) 
 	compareHash("MixDigest", actual.MixDigest, expected.MixDigest)
 	compareUint64("Nonce", actual.Nonce.Uint64(), expected.Nonce.Uint64())
 	compareBigInt("BaseFee", actual.BaseFee, expected.BaseFee)
-	compareTxDependency("TxDependency", actual.TxDependency, expected.TxDependency)
 
 	ReportToUser("")
 }

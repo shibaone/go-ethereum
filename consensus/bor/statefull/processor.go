@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/firehose"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/crypto/sha3"
@@ -116,8 +117,9 @@ func ApplyMessage(
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{}, txFirehoseContext)
 
+	// nolint : contextcheck
 	// Apply the transaction to the current state (included in the env)
-	_, gasLeft, err := vmenv.Call(
+	ret, gasLeft, err := vmenv.Call(
 		vm.AccountRef(msg.From()),
 		*msg.To(),
 		msg.Data(),
@@ -125,6 +127,13 @@ func ApplyMessage(
 		msg.Value(),
 		nil,
 	)
+
+	success := big.NewInt(5).SetBytes(ret)
+
+	if success.Cmp(big.NewInt(0)) == 0 {
+		log.Error("message execution failed on contract", "msgData", msg.Data)
+	}
+
 	// Update the state with pending changes
 	if err != nil {
 		state.Finalise(true)
@@ -145,7 +154,7 @@ func ApplyMessage(
 			receipt.ContractAddress = crypto.CreateAddress(vmenv.TxContext.Origin, spanID)
 		}
 		// Set the receipt logs and create a bloom for filtering
-		receipt.Logs = state.GetLogs(txHash, blockHash)
+		receipt.Logs = state.GetLogs(txHash, header.Number.Uint64(), blockHash)
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		receipt.BlockHash = blockHash
 		receipt.BlockNumber = header.Number
