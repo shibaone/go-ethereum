@@ -145,7 +145,7 @@ func ApplyMessage(
 			receipt.ContractAddress = crypto.CreateAddress(vmenv.TxContext.Origin, spanID)
 		}
 		// Set the receipt logs and create a bloom for filtering
-		receipt.Logs = state.GetLogs(txHash, blockHash)
+		receipt.Logs = state.GetLogs(txHash, header.Number.Uint64(), blockHash)
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		receipt.BlockHash = blockHash
 		receipt.BlockNumber = header.Number
