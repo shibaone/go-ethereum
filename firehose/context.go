@@ -342,10 +342,15 @@ func (ctx *Context) StartTransactionRaw(
 		toAsString = Addr(*to)
 	}
 
-	// London fork not active in this branch yet, add proper handling here when it's the case (and remove this comment)
 	maxFeePerGasAsString := "."
-	// London fork not active in this branch yet, add proper handling here when it's the case (and remove this comment)
+	if maxFeePerGas != nil {
+		maxFeePerGasAsString = Hex(maxFeePerGas.Bytes())
+	}
+
 	maxPriorityFeePerGasAsString := "."
+	if maxPriorityFeePerGas != nil {
+		maxPriorityFeePerGasAsString = Hex(maxPriorityFeePerGas.Bytes())
+	}
 
 	ctx.printer.Print("BEGIN_APPLY_TRX",
 		Hash(hash),
