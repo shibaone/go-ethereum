@@ -33,7 +33,7 @@ func init() {
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Before = func(ctx *cli.Context) error {
 		flags.MigrateGlobalFlags(ctx)
-		return debug.Setup(ctx, nil)
+		return debug.Setup(ctx, nil, "")
 	}
 	app.After = func(ctx *cli.Context) error {
 		debug.Exit()

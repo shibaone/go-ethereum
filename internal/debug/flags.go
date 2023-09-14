@@ -25,18 +25,17 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/fjl/memsize/memsizeui"
-	"github.com/mattn/go-colorable"
-	"github.com/mattn/go-isatty"
-	"github.com/urfave/cli/v2"
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
+	"github.com/fjl/memsize/memsizeui"
+	"github.com/mattn/go-colorable"
+	"github.com/mattn/go-isatty"
+	"github.com/urfave/cli/v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var Memsize memsizeui.Handler
@@ -229,7 +228,7 @@ func init() {
 // Setup initializes profiling and logging based on the CLI flags.
 // It should be called as early as possible in the program.
 // nolint:nestif
-func Setup(ctx *cli.Context, genesis *core.Genesis) error {
+func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion string) error {
 	var (
 		logfmt     log.Format
 		output     = io.Writer(os.Stderr)
@@ -372,18 +371,15 @@ func Setup(ctx *cli.Context, genesis *core.Genesis) error {
 		log.Info("Logging configured", context...)
 	}
 
-	// Firehose: Must be below loadChain as the genesis in the chain is needed for Firehose bootstrapping
-	if err := firehose.Init(
-		ctx.Bool(firehoseEnabledFlag.Name),
+	firehose.Init(ctx.Bool(firehoseEnabledFlag.Name),
 		ctx.Bool(firehoseSyncInstrumentationFlag.Name),
 		ctx.Bool(firehoseMiningEnabledFlag.Name),
 		ctx.Bool(firehoseBlockProgressFlag.Name),
-		genesis,
+		firehoseGenesis,
 		ctx.String(firehoseGenesisFileFlag.Name),
 		func() interface{} { return new(core.Genesis) },
-	); err != nil {
-		return fmt.Errorf("initialize firehose: %w", err)
-	}
+		firehoseGethVersion,
+	)
 
 	return nil
 }
