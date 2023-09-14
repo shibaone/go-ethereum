@@ -42,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics/influxdb"
 	"github.com/ethereum/go-ethereum/metrics/prometheus"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 
 	// Force-load the tracer engines to trigger registration
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
@@ -150,6 +151,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 		config.chain.Genesis,
 		fh.GenesisFile,
 		func() interface{} { return new(core.Genesis) },
+		params.VersionWithMetaCommitDetails,
 	); err != nil {
 		return nil, fmt.Errorf("initialize firehose: %w", err)
 	}
