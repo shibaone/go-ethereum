@@ -17,7 +17,6 @@
 package debug
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,7 +37,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 var Memsize memsizeui.Handler
@@ -374,59 +372,18 @@ func Setup(ctx *cli.Context, genesis *core.Genesis) error {
 		log.Info("Logging configured", context...)
 	}
 
-	// Firehose
-	log.Info("Initializing firehose")
-	firehose.Enabled = ctx.Bool(firehoseEnabledFlag.Name)
-	firehose.SyncInstrumentationEnabled = ctx.Bool(firehoseSyncInstrumentationFlag.Name)
-	firehose.MiningEnabled = ctx.Bool(firehoseMiningEnabledFlag.Name)
-	firehose.BlockProgressEnabled = ctx.Bool(firehoseBlockProgressFlag.Name)
-
-	if firehose.Enabled {
-		firehose.Init()
+	// Firehose: Must be below loadChain as the genesis in the chain is needed for Firehose bootstrapping
+	if err := firehose.Init(
+		ctx.Bool(firehoseEnabledFlag.Name),
+		ctx.Bool(firehoseSyncInstrumentationFlag.Name),
+		ctx.Bool(firehoseMiningEnabledFlag.Name),
+		ctx.Bool(firehoseBlockProgressFlag.Name),
+		genesis,
+		ctx.String(firehoseGenesisFileFlag.Name),
+		func() interface{} { return new(core.Genesis) },
+	); err != nil {
+		return fmt.Errorf("initialize firehose: %w", err)
 	}
-
-	genesisProvenance := "unset"
-
-	if genesis != nil {
-		firehose.GenesisConfig = genesis
-		genesisProvenance = "Geth Specific Flag"
-	} else {
-		if genesisFilePath := ctx.String(firehoseGenesisFileFlag.Name); genesisFilePath != "" {
-			file, err := os.Open(genesisFilePath)
-			if err != nil {
-				return fmt.Errorf("firehose open genesis file: %w", err)
-			}
-			defer file.Close()
-
-			genesis := &core.Genesis{}
-			if err := json.NewDecoder(file).Decode(genesis); err != nil {
-				return fmt.Errorf("decode genesis file %q: %w", genesisFilePath, err)
-			}
-
-			firehose.GenesisConfig = genesis
-			genesisProvenance = "Flag " + firehoseGenesisFileFlag.Name
-		} else {
-			firehose.GenesisConfig = core.DefaultBorMainnetGenesisBlock()
-			genesisProvenance = "Geth Default (Polygon Mainnet)"
-		}
-	}
-
-	log.Info("Firehose initialized",
-		"enabled", firehose.Enabled,
-		"sync_instrumentation_enabled", firehose.SyncInstrumentationEnabled,
-		"mining_enabled", firehose.MiningEnabled,
-		"block_progress_enabled", firehose.BlockProgressEnabled,
-		"genesis_provenance", genesisProvenance,
-		"firehose_version", params.FirehoseVersion(),
-		"geth_version", params.VersionWithMeta,
-		"chain_variant", params.Variant,
-	)
-
-	firehose.MaybeSyncContext().InitVersion(
-		params.VersionWithMetaCommitDetails,
-		params.FirehoseVersion(),
-		params.Variant,
-	)
 
 	return nil
 }

@@ -1006,5 +1006,36 @@ func (c *Command) Flags() *flagset.Flagset {
 	// 	Default: c.cliConfig.Pprof.CPUProfile,
 	// })
 
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "firehose-enabled",
+		Usage:   "Activate/deactivate Firehose instrumentation, disabled by default",
+		Value:   &c.cliConfig.Firehose.Enabled,
+		Default: false,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "firehose-sync-instrumentation",
+		Usage:   "Activate/deactivate Firehose sync output instrumentation, enabled by default",
+		Value:   &c.cliConfig.Firehose.SyncInstrumentation,
+		Default: true,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "firehose-mining-enabled",
+		Usage:   "Activate/deactivate mining code even if Firehose is active, required speculative execution on local miner node, disabled by default",
+		Value:   &c.cliConfig.Firehose.MiningEnabled,
+		Default: false,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "firehose-block-progress",
+		Usage:   "Activate/deactivate Firehose block progress output instrumentation, disabled by default",
+		Value:   &c.cliConfig.Firehose.BlockProgress,
+		Default: false,
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "firehose-genesis-file",
+		Usage:   "On private chains where the genesis config is not known to Geth, you **must** provide the 'genesis.json' file path for proper instrumentation of genesis block",
+		Value:   &c.cliConfig.Firehose.GenesisFile,
+		Default: "",
+	})
+
 	return f
 }

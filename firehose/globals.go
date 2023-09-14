@@ -1,6 +1,14 @@
 package firehose
 
-import "bytes"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
+)
 
 // Enabled determines if firehose instrumentation is enabled. Controlling
 // firehose behavior is then controlled via other flag like.
@@ -43,8 +51,77 @@ var BlockProgressEnabled = false
 // Consumer of this library make the cast back to the correct types when needed.
 var GenesisConfig interface{}
 
-// Init is called manually when Firehose is bootstrapped.
-func Init() {
+// Init initializes firehose with the given parameters.
+//
+// We cannot depend on `core` package because it already depends on `firehose` package. That's why here you see `genesis interface{}`
+// (which should have been `*core.Genesis`) and a provided way to decode the genesis reader into its correct type.
+func Init(
+	enabled bool,
+	syncInstrumentation bool,
+	miningEnabled bool,
+	blockProgress bool,
+	genesis interface{},
+	genesisFile string,
+	newGenesis func() interface{},
+) error {
+	log.Debug("Initializing firehose")
+	Enabled = enabled
+	SyncInstrumentationEnabled = syncInstrumentation
+	MiningEnabled = miningEnabled
+	BlockProgressEnabled = blockProgress
+
+	genesisProvenance := "unset"
+
+	if genesis != nil {
+		GenesisConfig = genesis
+		genesisProvenance = "Geth Specific Flag"
+	} else {
+		if genesisFilePath := genesisFile; genesisFilePath != "" {
+			file, err := os.Open(genesisFilePath)
+			if err != nil {
+				return fmt.Errorf("firehose open genesis file: %w", err)
+			}
+			defer file.Close()
+
+			var genesis = newGenesis()
+			if err := json.NewDecoder(file).Decode(genesis); err != nil {
+				return fmt.Errorf("decode genesis file %q: %w", genesisFilePath, err)
+			}
+
+			GenesisConfig = genesis
+			genesisProvenance = "User provider"
+		}
+	}
+
+	if Enabled {
+		AllocateBuffers()
+	}
+
+	if Enabled || SyncInstrumentationEnabled || BlockProgressEnabled || MiningEnabled {
+		log.Info("Firehose initialized",
+			"enabled", Enabled,
+			"sync_instrumentation_enabled", SyncInstrumentationEnabled,
+			"mining_enabled", MiningEnabled,
+			"block_progress_enabled", BlockProgressEnabled,
+			"genesis_configured", genesis != nil,
+			"genesis_provenance", genesisProvenance,
+			"firehose_version", params.FirehoseVersion(),
+			"geth_version", params.VersionWithMeta,
+			"chain_variant", params.Variant,
+		)
+	}
+
+	MaybeSyncContext().InitVersion(
+		params.VersionWithMetaCommitDetails,
+		params.FirehoseVersion(),
+		params.Variant,
+	)
+
+	return nil
+}
+
+// AllocateBuffers is called manually when Firehose is bootstrapped.
+func AllocateBuffers() {
 	if !Enabled {
 		return
 	}

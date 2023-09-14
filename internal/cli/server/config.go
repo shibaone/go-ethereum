@@ -140,6 +140,9 @@ type Config struct {
 
 	// Pprof has the pprof related settings
 	Pprof *PprofConfig `hcl:"pprof,block" toml:"pprof,block"`
+
+	// Firehose has the Firehose related settings
+	Firehose *FirehoseConfig `hcl:"firehose,block" toml:"firehose,block"`
 }
 
 type LoggingConfig struct {
@@ -594,6 +597,14 @@ type ParallelEVMConfig struct {
 	SpeculativeProcesses int `hcl:"procs,optional" toml:"procs,optional"`
 }
 
+type FirehoseConfig struct {
+	Enabled             bool   `hcl:"pprof,optional" toml:"pprof,optional"`
+	SyncInstrumentation bool   `hcl:"syncinstrumentation,optional" toml:"syncinstrumentation,optional"`
+	MiningEnabled       bool   `hcl:"mining,optional" toml:"mining,optional"`
+	BlockProgress       bool   `hcl:"blockprogress,optional" toml:"blockprogress,optional"`
+	GenesisFile         string `hcl:"genesisfile,optional" toml:"genesisfile,optional"`
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:                   "mainnet",
@@ -786,6 +797,13 @@ func DefaultConfig() *Config {
 		ParallelEVM: &ParallelEVMConfig{
 			Enable:               true,
 			SpeculativeProcesses: 8,
+		},
+		Firehose: &FirehoseConfig{
+			Enabled:             false,
+			SyncInstrumentation: true,
+			MiningEnabled:       false,
+			BlockProgress:       false,
+			GenesisFile:         "",
 		},
 	}
 }

@@ -28,10 +28,12 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/beacon" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor"    //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/clique"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethstats"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/graphql"
 	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
@@ -136,6 +138,20 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	// load the chain genesis
 	if err = config.loadChain(); err != nil {
 		return nil, err
+	}
+
+	// Firehose: Must be below loadChain as the genesis in the chain is needed for Firehose bootstrapping
+	fh := config.Firehose
+	if err := firehose.Init(
+		fh.Enabled,
+		fh.SyncInstrumentation,
+		fh.MiningEnabled,
+		fh.BlockProgress,
+		config.chain.Genesis,
+		fh.GenesisFile,
+		func() interface{} { return new(core.Genesis) },
+	); err != nil {
+		return nil, fmt.Errorf("initialize firehose: %w", err)
 	}
 
 	// create the node/stack
