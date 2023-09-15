@@ -4,8 +4,8 @@ on:
   push:
     tags:
       - "[a-z0-9]+-v*"
+    # Expected to be <network>/{fix,feature}/<name> where <network> is one of {geth,bsc,polygon,etc.}
     branches:
-      # Expected to be <network>/{fix,feature}/<name> where <network> is one of {geth,bsc,polygon,etc.}
       - "*/fix/*"
       - "*/feature/*"
 
@@ -39,7 +39,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Build Binary
-        run: make geth
+        run: make bor
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2
