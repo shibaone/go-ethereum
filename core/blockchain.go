@@ -2223,7 +2223,16 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				firehoseContext.FinalizeBlock(block)
 				ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 				td := new(big.Int).Add(block.Difficulty(), ptd)
-				firehoseContext.EndBlock(block, td)
+
+				finalBlockHeader := bc.CurrentFinalBlock()
+				if finalBlockHeader != nil && firehose.SyncingBehindFinalized() {
+					// If beaconFinalizedBlockNum is in the future, the 'finalizedBlock' will not progress until we reach it.
+					// we don't want to advertise a super old finalizedBlock when reprocessing.
+					finalBlockHeader = nil
+				}
+
+				// Firehose: Final block disabled until further testing
+				firehoseContext.EndBlock(block, nil, td)
 				firehoseContext.FlushBlock()
 			}
 
@@ -2305,7 +2314,25 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			// Calculate the total difficulty of the block
 			ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 			td := new(big.Int).Add(block.Difficulty(), ptd)
-			firehoseContext.EndBlock(block, td)
+
+			finalBlockHeader := bc.CurrentFinalBlock()
+			if finalBlockHeader != nil {
+				// If finalBlockHeader is unset, it means we are syncing from genesis and we did not
+				// caught up with
+				finalBlockHeader = nil
+			}
+
+			if block.NumberU64()%100 == 0 {
+				finalizedBlock := "<N/A>"
+				if finalBlock := bc.CurrentFinalBlock(); finalBlock != nil {
+					finalizedBlock = fmt.Sprintf("#%d (%s)", finalBlock.Number.Uint64(), finalBlock.Hash().Hex())
+				}
+
+				log.Info("[Firehose] Firehose ingested block", "block", block.NumberU64(), "finalized_block", finalizedBlock)
+			}
+
+			// Firehose: Final block disabled until further testing
+			firehoseContext.EndBlock(block, nil, td)
 		}
 
 		vtime := time.Since(vstart)

@@ -158,7 +158,7 @@ func (ctx *Context) RecordGenesisBlock(block *types.Block, recordGenesisAlloc fu
 	recordGenesisAlloc(ctx)
 	ctx.EndTransaction(&types.Receipt{PostState: root[:]})
 	ctx.FinalizeBlock(block)
-	ctx.EndBlock(block, block.Difficulty())
+	ctx.EndBlock(block, nil, block.Difficulty())
 }
 
 func (ctx *Context) StartBlock(block *types.Block) {
@@ -178,15 +178,22 @@ func (ctx *Context) FinalizeBlock(block *types.Block) {
 	ctx.printer.Print("FINALIZE_BLOCK", Uint64(block.NumberU64()))
 }
 
-func (ctx *Context) EndBlock(block *types.Block, totalDifficulty *big.Int) {
+func (ctx *Context) EndBlock(block *types.Block, finalBlockHeader *types.Header, totalDifficulty *big.Int) {
+	endData := map[string]interface{}{
+		"header":          block.Header(),
+		"uncles":          block.Body().Uncles,
+		"totalDifficulty": (*hexutil.Big)(totalDifficulty),
+	}
+
+	if finalBlockHeader != nil {
+		endData["finalizedBlockNum"] = (*hexutil.Big)(finalBlockHeader.Number)
+		endData["finalizedBlockHash"] = finalBlockHeader.Hash()
+	}
+
 	ctx.printer.Print("END_BLOCK",
 		Uint64(block.NumberU64()),
 		Uint64(uint64(block.Size())),
-		JSON(map[string]interface{}{
-			"header":          block.Header(),
-			"uncles":          block.Body().Uncles,
-			"totalDifficulty": (*hexutil.Big)(totalDifficulty),
-		}),
+		JSON(endData),
 	)
 }
 
