@@ -140,12 +140,11 @@ func (evm *EVM) SetFirehoseContext(txFirehoseContext *firehose.Context) {
 // only ever be used *once*.
 func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig *params.ChainConfig, config Config, firehoseContext *firehose.Context) *EVM {
 	evm := &EVM{
-		Context:     blockCtx,
-		TxContext:   txCtx,
-		StateDB:     statedb,
-		Config:      config,
-		chainConfig: chainConfig,
-		// TODO marcello double check
+		Context:         blockCtx,
+		TxContext:       txCtx,
+		StateDB:         statedb,
+		Config:          config,
+		chainConfig:     chainConfig,
 		chainRules:      chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil, blockCtx.Time),
 		firehoseContext: firehoseContext,
 	}

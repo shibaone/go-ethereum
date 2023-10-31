@@ -4,8 +4,12 @@ import (
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 )
 
-func (c *Command) Flags() *flagset.Flagset {
-	c.cliConfig = DefaultConfig()
+func (c *Command) Flags(config *Config) *flagset.Flagset {
+	if config != nil {
+		c.cliConfig = config
+	} else {
+		c.cliConfig = DefaultConfig()
+	}
 
 	f := flagset.NewFlagSet("server")
 
@@ -60,9 +64,10 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.DBEngine,
 	})
 	f.StringFlag(&flagset.StringFlag{
-		Name:  "keystore",
-		Usage: "Path of the directory where keystores are located",
-		Value: &c.cliConfig.KeyStoreDir,
+		Name:    "keystore",
+		Usage:   "Path of the directory where keystores are located",
+		Value:   &c.cliConfig.KeyStoreDir,
+		Default: c.cliConfig.KeyStoreDir,
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "rpc.batchlimit",

@@ -71,7 +71,6 @@ var (
 		utils.NoUSBFlag,
 		utils.USBFlag,
 		utils.SmartCardDaemonPathFlag,
-		// TODO marcello double check
 		utils.OverrideShanghai,
 		utils.EnablePersonal,
 		utils.EthashCacheDirFlag,
