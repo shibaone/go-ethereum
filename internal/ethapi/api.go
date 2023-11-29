@@ -2069,10 +2069,7 @@ func (s *TransactionAPI) GetTransactionReceiptsByBlockNumber(ctx context.Context
 	txReceipts := make([]map[string]interface{}, 0, len(txs))
 	for idx, receipt := range receipts {
 		tx := txs[idx]
-		var signer types.Signer = types.FrontierSigner{}
-		if tx.Protected() {
-			signer = types.NewEIP155Signer(tx.ChainId())
-		}
+		signer := types.MakeSigner(s.b.ChainConfig(), block.Number(), block.Time())
 		from, _ := types.Sender(signer, tx)
 
 		fields := map[string]interface{}{
@@ -2087,6 +2084,8 @@ func (s *TransactionAPI) GetTransactionReceiptsByBlockNumber(ctx context.Context
 			"contractAddress":   nil,
 			"logs":              receipt.Logs,
 			"logsBloom":         receipt.Bloom,
+			"type":              hexutil.Uint(tx.Type()),
+			"effectiveGasPrice": (*hexutil.Big)(receipt.EffectiveGasPrice),
 		}
 
 		// Assign receipt status or post state.
@@ -2125,7 +2124,7 @@ func (s *TransactionAPI) GetTransactionDataAndReceipt(ctx context.Context, hash 
 	receipt := receipts[index]
 
 	// Derive the sender.
-	header, err := s.b.HeaderByHash(ctx, hash)
+	header, err := s.b.HeaderByHash(ctx, blockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -2163,6 +2162,8 @@ func (s *TransactionAPI) GetTransactionDataAndReceipt(ctx context.Context, hash 
 		"contractAddress":   nil,
 		"logs":              receipt.Logs,
 		"logsBloom":         receipt.Bloom,
+		"type":              hexutil.Uint(tx.Type()),
+		"effectiveGasPrice": (*hexutil.Big)(receipt.EffectiveGasPrice),
 	}
 
 	// Assign receipt status or post state.
