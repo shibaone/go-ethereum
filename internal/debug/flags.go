@@ -19,6 +19,7 @@ package debug
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -227,14 +228,12 @@ func init() {
 
 // Setup initializes profiling and logging based on the CLI flags.
 // It should be called as early as possible in the program.
-// nolint:nestif
 func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion string) error {
 	var (
 		logfmt     log.Format
 		output     = io.Writer(os.Stderr)
 		logFmtFlag = ctx.String(logFormatFlag.Name)
 	)
-
 	switch {
 	case ctx.Bool(logjsonFlag.Name):
 		// Retain backwards compatibility with `--log.json` flag if `--log.format` not set
@@ -249,33 +248,28 @@ func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion 
 		if useColor {
 			output = colorable.NewColorableStderr()
 		}
-
 		logfmt = log.TerminalFormat(useColor)
 	default:
 		// Unknown log format specified
 		return fmt.Errorf("unknown log format: %v", ctx.String(logFormatFlag.Name))
 	}
-
 	var (
 		stdHandler = log.StreamHandler(output, logfmt)
 		ostream    = stdHandler
 		logFile    = ctx.String(logFileFlag.Name)
 		rotation   = ctx.Bool(logRotateFlag.Name)
 	)
-
 	if len(logFile) > 0 {
 		if err := validateLogLocation(filepath.Dir(logFile)); err != nil {
 			return fmt.Errorf("failed to initiatilize file logger: %v", err)
 		}
 	}
-
 	context := []interface{}{"rotate", rotation}
 	if len(logFmtFlag) > 0 {
 		context = append(context, "format", logFmtFlag)
 	} else {
 		context = append(context, "format", "terminal")
 	}
-
 	if rotation {
 		// Lumberjack uses <processname>-lumberjack.log in is.TempDir() if empty.
 		// so typically /tmp/geth-lumberjack.log on linux
@@ -284,7 +278,6 @@ func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion 
 		} else {
 			context = append(context, "location", filepath.Join(os.TempDir(), "geth-lumberjack.log"))
 		}
-
 		ostream = log.MultiHandler(log.StreamHandler(&lumberjack.Logger{
 			Filename:   logFile,
 			MaxSize:    ctx.Int(logMaxSizeMBsFlag.Name),
@@ -297,17 +290,14 @@ func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion 
 			return err
 		} else {
 			ostream = log.MultiHandler(logOutputStream, stdHandler)
-
 			context = append(context, "location", logFile)
 		}
 	}
-
 	glogger.SetHandler(ostream)
 
 	// logging
 	verbosity := ctx.Int(verbosityFlag.Name)
 	glogger.Verbosity(log.Lvl(verbosity))
-
 	vmodule := ctx.String(logVmoduleFlag.Name)
 	if vmodule == "" {
 		// Retain backwards compatibility with `--vmodule` flag if `--log.vmodule` not set
@@ -316,14 +306,12 @@ func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion 
 			defer log.Warn("The flag '--vmodule' is deprecated, please use '--log.vmodule' instead")
 		}
 	}
-
 	glogger.Vmodule(vmodule)
 
 	debug := ctx.Bool(debugFlag.Name)
 	if ctx.IsSet(debugFlag.Name) {
 		debug = ctx.Bool(debugFlag.Name)
 	}
-
 	log.PrintOrigins(debug)
 
 	backtrace := ctx.String(backtraceAtFlag.Name)
@@ -358,15 +346,11 @@ func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion 
 
 		port := ctx.Int(pprofPortFlag.Name)
 
-		address := fmt.Sprintf("%s:%d", listenHost, port)
+		address := net.JoinHostPort(listenHost, fmt.Sprintf("%d", port))
 		// This context value ("metrics.addr") represents the utils.MetricsHTTPFlag.Name.
 		// It cannot be imported because it will cause a cyclical dependency.
 		StartPProf(address, !ctx.IsSet("metrics.addr"))
-	} else if ctx.IsSet("bor-mumbai") || ctx.IsSet("bor-mainnet") {
-		address := fmt.Sprintf("%s:%d", "0.0.0.0", 7071)
-		StartPProf(address, !ctx.IsSet("metrics.addr"))
 	}
-
 	if len(logFile) > 0 || rotation {
 		log.Info("Logging configured", context...)
 	}
@@ -392,10 +376,8 @@ func StartPProf(address string, withMetrics bool) {
 	if withMetrics {
 		exp.Exp(metrics.DefaultRegistry)
 	}
-
 	http.Handle("/memsize/", http.StripPrefix("/memsize", &Memsize))
 	log.Info("Starting pprof server", "addr", fmt.Sprintf("http://%s/debug/pprof", address))
-
 	go func() {
 		if err := http.ListenAndServe(address, nil); err != nil {
 			log.Error("Failure in running pprof server", "err", err)
@@ -408,7 +390,6 @@ func StartPProf(address string, withMetrics bool) {
 func Exit() {
 	Handler.StopCPUProfile()
 	Handler.StopGoTrace()
-
 	if closer, ok := logOutputStream.(io.Closer); ok {
 		closer.Close()
 	}
@@ -425,6 +406,5 @@ func validateLogLocation(path string) error {
 	} else {
 		f.Close()
 	}
-
 	return os.Remove(tmp)
 }

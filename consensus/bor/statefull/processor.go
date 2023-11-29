@@ -105,6 +105,9 @@ func ApplyMessage(
 			types.LegacyTxType,
 			// FIREHOSE: Deal with the fact that global context for block is not available anymore here
 			txFirehoseContext.LastTransactionIndex()+1,
+			0,
+			nil,
+			nil,
 		)
 		txFirehoseContext.RecordTrxFrom(msg.From())
 	}
@@ -172,7 +175,7 @@ func ApplyMessage(
 	return gasUsed, nil
 }
 
-func ApplyBorMessage(vmenv vm.EVM, msg Callmsg) (*core.ExecutionResult, error) {
+func ApplyBorMessage(vmenv *vm.EVM, msg Callmsg) (*core.ExecutionResult, error) {
 	initialGas := msg.Gas()
 
 	// Apply the transaction to the current state (included in the env)

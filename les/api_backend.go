@@ -58,7 +58,6 @@ func (b *LesApiBackend) CurrentBlock() *types.Header {
 }
 
 func (b *LesApiBackend) SetHead(number uint64) {
-	b.eth.handler.downloader.Cancel()
 	b.eth.blockchain.SetHead(number)
 }
 
@@ -69,11 +68,9 @@ func (b *LesApiBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumb
 	if number == rpc.PendingBlockNumber {
 		return b.eth.blockchain.CurrentHeader(), nil
 	}
-
 	if number == rpc.LatestBlockNumber {
 		return b.eth.blockchain.CurrentHeader(), nil
 	}
-
 	return b.eth.blockchain.GetHeaderByNumberOdr(ctx, uint64(number))
 }
 
@@ -81,24 +78,19 @@ func (b *LesApiBackend) HeaderByNumberOrHash(ctx context.Context, blockNrOrHash 
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.HeaderByNumber(ctx, blockNr)
 	}
-
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		header, err := b.HeaderByHash(ctx, hash)
 		if err != nil {
 			return nil, err
 		}
-
 		if header == nil {
 			return nil, errors.New("header for hash not found")
 		}
-
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()) != hash {
 			return nil, errors.New("hash is not currently canonical")
 		}
-
 		return header, nil
 	}
-
 	return nil, errors.New("invalid arguments; neither block nor hash specified")
 }
 
@@ -111,7 +103,6 @@ func (b *LesApiBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumbe
 	if header == nil || err != nil {
 		return nil, err
 	}
-
 	return b.BlockByHash(ctx, header.Hash())
 }
 
@@ -123,24 +114,19 @@ func (b *LesApiBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash r
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.BlockByNumber(ctx, blockNr)
 	}
-
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		block, err := b.BlockByHash(ctx, hash)
 		if err != nil {
 			return nil, err
 		}
-
 		if block == nil {
 			return nil, errors.New("header found, but block body is missing")
 		}
-
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(block.NumberU64()) != hash {
 			return nil, errors.New("hash is not currently canonical")
 		}
-
 		return block, nil
 	}
-
 	return nil, errors.New("invalid arguments; neither block nor hash specified")
 }
 
@@ -157,11 +143,9 @@ func (b *LesApiBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 	if err != nil {
 		return nil, nil, err
 	}
-
 	if header == nil {
 		return nil, nil, errors.New("header not found")
 	}
-
 	return light.NewState(ctx, header, b.eth.odr), header, nil
 }
 
@@ -169,20 +153,16 @@ func (b *LesApiBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockN
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.StateAndHeaderByNumber(ctx, blockNr)
 	}
-
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		header := b.eth.blockchain.GetHeaderByHash(hash)
 		if header == nil {
 			return nil, nil, errors.New("header for hash not found")
 		}
-
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()) != hash {
 			return nil, nil, errors.New("hash is not currently canonical")
 		}
-
 		return light.NewState(ctx, header, b.eth.odr), header, nil
 	}
-
 	return nil, nil, errors.New("invalid arguments; neither block nor hash specified")
 }
 
@@ -190,7 +170,6 @@ func (b *LesApiBackend) GetReceipts(ctx context.Context, hash common.Hash) (type
 	if number := rawdb.ReadHeaderNumber(b.eth.chainDb, hash); number != nil {
 		return light.GetBlockReceipts(ctx, b.eth.odr, hash, *number)
 	}
-
 	return nil, nil
 }
 
@@ -202,19 +181,19 @@ func (b *LesApiBackend) GetTd(ctx context.Context, hash common.Hash) *big.Int {
 	if number := rawdb.ReadHeaderNumber(b.eth.chainDb, hash); number != nil {
 		return b.eth.blockchain.GetTdOdr(ctx, hash, *number)
 	}
-
 	return nil
 }
 
-func (b *LesApiBackend) GetEVM(ctx context.Context, msg *core.Message, state *state.StateDB, header *types.Header, vmConfig *vm.Config, firehoseContext *firehose.Context) (*vm.EVM, func() error, error) {
+func (b *LesApiBackend) GetEVM(ctx context.Context, msg *core.Message, state *state.StateDB, header *types.Header, vmConfig *vm.Config, blockCtx *vm.BlockContext, firehoseContext *firehose.Context) (*vm.EVM, func() error) {
 	if vmConfig == nil {
 		vmConfig = new(vm.Config)
 	}
-
 	txContext := core.NewEVMTxContext(msg)
 	context := core.NewEVMBlockContext(header, b.eth.blockchain, nil)
-
-	return vm.NewEVM(context, txContext, state, b.eth.chainConfig, *vmConfig, firehoseContext), state.Error, nil
+	if blockCtx != nil {
+		context = *blockCtx
+	}
+	return vm.NewEVM(context, txContext, state, b.eth.chainConfig, *vmConfig, firehoseContext), state.Error
 }
 
 func (b *LesApiBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
@@ -245,11 +224,11 @@ func (b *LesApiBackend) Stats() (pending int, queued int) {
 	return b.eth.txPool.Stats(), 0
 }
 
-func (b *LesApiBackend) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
+func (b *LesApiBackend) TxPoolContent() (map[common.Address][]*types.Transaction, map[common.Address][]*types.Transaction) {
 	return b.eth.txPool.Content()
 }
 
-func (b *LesApiBackend) TxPoolContentFrom(addr common.Address) (types.Transactions, types.Transactions) {
+func (b *LesApiBackend) TxPoolContentFrom(addr common.Address) ([]*types.Transaction, []*types.Transaction) {
 	return b.eth.txPool.ContentFrom(addr)
 }
 
@@ -285,7 +264,7 @@ func (b *LesApiBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEven
 }
 
 func (b *LesApiBackend) SyncProgress() ethereum.SyncProgress {
-	return b.eth.Downloader().Progress()
+	return ethereum.SyncProgress{}
 }
 
 func (b *LesApiBackend) ProtocolVersion() int {
@@ -320,10 +299,6 @@ func (b *LesApiBackend) RPCGasCap() uint64 {
 	return b.eth.config.RPCGasCap
 }
 
-func (b *LesApiBackend) RPCRpcReturnDataLimit() uint64 {
-	return b.eth.config.RPCReturnDataLimit
-}
-
 func (b *LesApiBackend) RPCEVMTimeout() time.Duration {
 	return b.eth.config.RPCEVMTimeout
 }
@@ -336,9 +311,7 @@ func (b *LesApiBackend) BloomStatus() (uint64, uint64) {
 	if b.eth.bloomIndexer == nil {
 		return 0, 0
 	}
-
 	sections, _, _ := b.eth.bloomIndexer.Sections()
-
 	return params.BloomBitsBlocksClient, sections
 }
 
@@ -362,6 +335,10 @@ func (b *LesApiBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 
 func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
+}
+
+func (b *LesApiBackend) RPCRpcReturnDataLimit() uint64 {
+	return b.eth.config.RPCReturnDataLimit
 }
 
 //

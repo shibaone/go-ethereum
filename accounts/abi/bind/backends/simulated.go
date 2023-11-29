@@ -100,7 +100,6 @@ func NewSimulatedBackendWithDatabase(database ethdb.Database, alloc core.Genesis
 	block := backend.blockchain.GetBlock(header.Hash(), header.Number.Uint64())
 
 	backend.rollback(block)
-
 	return backend
 }
 
@@ -126,7 +125,6 @@ func (b *SimulatedBackend) Commit() common.Hash {
 	if _, err := b.blockchain.InsertChain([]*types.Block{b.pendingBlock}); err != nil {
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
-
 	blockHash := b.pendingBlock.Hash()
 
 	// Using the last inserted block here makes it possible to build on a side
@@ -173,14 +171,11 @@ func (b *SimulatedBackend) Fork(ctx context.Context, parent common.Hash) error {
 	if len(b.pendingBlock.Transactions()) != 0 {
 		return errors.New("pending block dirty")
 	}
-
 	block, err := b.blockByHash(ctx, parent)
 	if err != nil {
 		return err
 	}
-
 	b.rollback(block)
-
 	return nil
 }
 
@@ -189,12 +184,10 @@ func (b *SimulatedBackend) stateByBlockNumber(ctx context.Context, blockNumber *
 	if blockNumber == nil || blockNumber.Cmp(b.blockchain.CurrentBlock().Number) == 0 {
 		return b.blockchain.State()
 	}
-
 	block, err := b.blockByNumber(ctx, blockNumber)
 	if err != nil {
 		return nil, err
 	}
-
 	return b.blockchain.StateAt(block.Root())
 }
 
@@ -248,7 +241,6 @@ func (b *SimulatedBackend) StorageAt(ctx context.Context, contract common.Addres
 	}
 
 	val := stateDB.GetState(contract, key)
-
 	return val[:], nil
 }
 
@@ -261,7 +253,6 @@ func (b *SimulatedBackend) TransactionReceipt(ctx context.Context, txHash common
 	if receipt == nil {
 		return nil, ethereum.NotFound
 	}
-
 	return receipt, nil
 }
 
@@ -277,12 +268,10 @@ func (b *SimulatedBackend) TransactionByHash(ctx context.Context, txHash common.
 	if tx != nil {
 		return tx, true, nil
 	}
-
 	tx, _, _, _ = rawdb.ReadTransaction(b.database, txHash)
 	if tx != nil {
 		return tx, false, nil
 	}
-
 	return nil, false, ethereum.NotFound
 }
 
@@ -417,11 +406,9 @@ func (b *SimulatedBackend) PendingCodeAt(ctx context.Context, contract common.Ad
 func newRevertError(result *core.ExecutionResult) *revertError {
 	reason, errUnpack := abi.UnpackRevert(result.Revert())
 	err := errors.New("execution reverted")
-
 	if errUnpack == nil {
 		err = fmt.Errorf("execution reverted: %v", reason)
 	}
-
 	return &revertError{
 		error:  err,
 		reason: hexutil.Encode(result.Revert()),
@@ -454,12 +441,10 @@ func (b *SimulatedBackend) CallContract(ctx context.Context, call ethereum.CallM
 	if blockNumber != nil && blockNumber.Cmp(b.blockchain.CurrentBlock().Number) != 0 {
 		return nil, errBlockNumberUnsupported
 	}
-
 	stateDB, err := b.blockchain.State()
 	if err != nil {
 		return nil, err
 	}
-
 	res, err := b.callContract(ctx, call, b.blockchain.CurrentBlock(), stateDB)
 	if err != nil {
 		return nil, err
@@ -468,7 +453,6 @@ func (b *SimulatedBackend) CallContract(ctx context.Context, call ethereum.CallM
 	if len(res.Revert()) > 0 {
 		return nil, newRevertError(res)
 	}
-
 	return res.Return(), res.Err
 }
 
@@ -486,7 +470,6 @@ func (b *SimulatedBackend) PendingCallContract(ctx context.Context, call ethereu
 	if len(res.Revert()) > 0 {
 		return nil, newRevertError(res)
 	}
-
 	return res.Return(), res.Err
 }
 
@@ -508,7 +491,6 @@ func (b *SimulatedBackend) SuggestGasPrice(ctx context.Context) (*big.Int, error
 	if b.pendingBlock.Header().BaseFee != nil {
 		return b.pendingBlock.Header().BaseFee, nil
 	}
-
 	return big.NewInt(1), nil
 }
 
@@ -530,7 +512,6 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 		hi  uint64
 		cap uint64
 	)
-
 	if call.Gas >= params.TxGas {
 		hi = call.Gas
 	} else {
@@ -538,7 +519,6 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 	}
 	// Normalize the max fee per gas the call is willing to spend.
 	var feeCap *big.Int
-
 	if call.GasPrice != nil && (call.GasFeeCap != nil || call.GasTipCap != nil) {
 		return 0, errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
 	} else if call.GasPrice != nil {
@@ -551,30 +531,24 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 	// Recap the highest gas allowance with account's balance.
 	if feeCap.BitLen() != 0 {
 		balance := b.pendingState.GetBalance(call.From) // from can't be nil
-
 		available := new(big.Int).Set(balance)
 		if call.Value != nil {
 			if call.Value.Cmp(available) >= 0 {
 				return 0, core.ErrInsufficientFundsForTransfer
 			}
-
 			available.Sub(available, call.Value)
 		}
-
 		allowance := new(big.Int).Div(available, feeCap)
 		if allowance.IsUint64() && hi > allowance.Uint64() {
 			transfer := call.Value
 			if transfer == nil {
 				transfer = new(big.Int)
 			}
-
 			log.Warn("Gas estimation capped by limited funds", "original", hi, "balance", balance,
 				"sent", transfer, "feecap", feeCap, "fundable", allowance)
-
 			hi = allowance.Uint64()
 		}
 	}
-
 	cap = hi
 
 	// Create a helper to check if a gas allowance results in an executable transaction
@@ -589,10 +563,8 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 			if errors.Is(err, core.ErrIntrinsicGas) {
 				return true, nil, nil // Special case, raise gas limit
 			}
-
 			return true, nil, err // Bail out
 		}
-
 		return res.Failed(), res, nil
 	}
 	// Execute the binary search and hone in on an executable gas limit
@@ -606,7 +578,6 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 		if err != nil {
 			return 0, err
 		}
-
 		if failed {
 			lo = mid
 		} else {
@@ -619,38 +590,33 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 		if err != nil {
 			return 0, err
 		}
-
 		if failed {
 			if result != nil && result.Err != vm.ErrOutOfGas {
 				if len(result.Revert()) > 0 {
 					return 0, newRevertError(result)
 				}
-
 				return 0, result.Err
 			}
 			// Otherwise, the specified gas cap is too low
 			return 0, fmt.Errorf("gas required exceeds allowance (%d)", cap)
 		}
 	}
-
 	return hi, nil
 }
 
 // callContract implements common code between normal and pending contract calls.
 // state is modified during execution, make sure to copy it if necessary.
-func (b *SimulatedBackend) callContract(_ context.Context, call ethereum.CallMsg, header *types.Header, stateDB *state.StateDB) (*core.ExecutionResult, error) {
+func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallMsg, header *types.Header, stateDB *state.StateDB) (*core.ExecutionResult, error) {
 	// Gas prices post 1559 need to be initialized
 	if call.GasPrice != nil && (call.GasFeeCap != nil || call.GasTipCap != nil) {
 		return nil, errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
 	}
-
 	head := b.blockchain.CurrentHeader()
 	if !b.blockchain.Config().IsLondon(head.Number) {
 		// If there's no basefee, then it must be a non-1559 execution
 		if call.GasPrice == nil {
 			call.GasPrice = new(big.Int)
 		}
-
 		call.GasFeeCap, call.GasTipCap = call.GasPrice, call.GasPrice
 	} else {
 		// A basefee is provided, necessitating 1559-type execution
@@ -662,7 +628,6 @@ func (b *SimulatedBackend) callContract(_ context.Context, call ethereum.CallMsg
 			if call.GasFeeCap == nil {
 				call.GasFeeCap = new(big.Int)
 			}
-
 			if call.GasTipCap == nil {
 				call.GasTipCap = new(big.Int)
 			}
@@ -677,7 +642,6 @@ func (b *SimulatedBackend) callContract(_ context.Context, call ethereum.CallMsg
 	if call.Gas == 0 {
 		call.Gas = 50000000
 	}
-
 	if call.Value == nil {
 		call.Value = new(big.Int)
 	}
@@ -707,7 +671,6 @@ func (b *SimulatedBackend) callContract(_ context.Context, call ethereum.CallMsg
 	vmEnv := vm.NewEVM(evmContext, txContext, stateDB, b.config, vm.Config{NoBaseFee: true}, firehose.NoOpContext)
 	gasPool := new(core.GasPool).AddGas(math.MaxUint64)
 
-	//nolint:contextcheck
 	return core.ApplyMessage(vmEnv, msg, gasPool, context.Background())
 }
 
@@ -719,27 +682,23 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 	// Get the last block
 	block, err := b.blockByHash(ctx, b.pendingBlock.ParentHash())
 	if err != nil {
-		return fmt.Errorf("could not fetch parent")
+		return errors.New("could not fetch parent")
 	}
 	// Check transaction validity
-	signer := types.MakeSigner(b.blockchain.Config(), block.Number())
-
+	signer := types.MakeSigner(b.blockchain.Config(), block.Number(), block.Time())
 	sender, err := types.Sender(signer, tx)
 	if err != nil {
 		return fmt.Errorf("invalid transaction: %v", err)
 	}
-
 	nonce := b.pendingState.GetNonce(sender)
 	if tx.Nonce() != nonce {
 		return fmt.Errorf("invalid transaction nonce: got %d, want %d", tx.Nonce(), nonce)
 	}
 	// Include tx in chain
-	// nolint : contextcheck
 	blocks, receipts := core.GenerateChain(b.config, block, ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
 		for _, tx := range b.pendingBlock.Transactions() {
 			block.AddTxWithChain(b.blockchain, tx)
 		}
-
 		block.AddTxWithChain(b.blockchain, tx)
 	})
 	stateDB, _ := b.blockchain.State()
@@ -747,7 +706,6 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 	b.pendingBlock = blocks[0]
 	b.pendingState, _ = state.New(b.pendingBlock.Root(), stateDB.Database(), nil)
 	b.pendingReceipts = receipts[0]
-
 	return nil
 }
 
@@ -766,7 +724,6 @@ func (b *SimulatedBackend) FilterLogs(ctx context.Context, query ethereum.Filter
 		if query.FromBlock != nil {
 			from = query.FromBlock.Int64()
 		}
-
 		to := int64(-1)
 		if query.ToBlock != nil {
 			to = query.ToBlock.Int64()
@@ -779,12 +736,10 @@ func (b *SimulatedBackend) FilterLogs(ctx context.Context, query ethereum.Filter
 	if err != nil {
 		return nil, err
 	}
-
 	res := make([]types.Log, len(logs))
 	for i, nLog := range logs {
 		res[i] = *nLog
 	}
-
 	return res, nil
 }
 
@@ -801,7 +756,6 @@ func (b *SimulatedBackend) SubscribeFilterLogs(ctx context.Context, query ethere
 	// Since we're getting logs in batches, we need to flatten them into a plain stream
 	return event.NewSubscription(func(quit <-chan struct{}) error {
 		defer sub.Unsubscribe()
-
 		for {
 			select {
 			case logs := <-sink:
@@ -831,7 +785,6 @@ func (b *SimulatedBackend) SubscribeNewHead(ctx context.Context, ch chan<- *type
 
 	return event.NewSubscription(func(quit <-chan struct{}) error {
 		defer sub.Unsubscribe()
-
 		for {
 			select {
 			case head := <-sink:
@@ -863,7 +816,7 @@ func (b *SimulatedBackend) AdjustTime(adjustment time.Duration) error {
 	// Get the last block
 	block := b.blockchain.GetBlockByHash(b.pendingBlock.ParentHash())
 	if block == nil {
-		return fmt.Errorf("could not find parent")
+		return errors.New("could not find parent")
 	}
 
 	blocks, _ := core.GenerateChain(b.config, block, ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
@@ -895,13 +848,11 @@ func (fb *filterBackend) ChainDb() ethdb.Database { return fb.db }
 func (fb *filterBackend) EventMux() *event.TypeMux { panic("not supported") }
 
 func (fb *filterBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error) {
-	// nolint : exhaustive
 	switch number {
 	case rpc.PendingBlockNumber:
 		if block := fb.backend.pendingBlock; block != nil {
 			return block.Header(), nil
 		}
-
 		return nil, nil
 	case rpc.LatestBlockNumber:
 		return fb.bc.CurrentHeader(), nil
@@ -922,7 +873,6 @@ func (fb *filterBackend) GetBody(ctx context.Context, hash common.Hash, number r
 	if body := fb.bc.GetBody(hash); body != nil {
 		return body, nil
 	}
-
 	return nil, errors.New("block body not found")
 }
 
@@ -935,8 +885,11 @@ func (fb *filterBackend) GetReceipts(ctx context.Context, hash common.Hash) (typ
 	if number == nil {
 		return nil, nil
 	}
-
-	return rawdb.ReadReceipts(fb.db, hash, *number, fb.bc.Config()), nil
+	header := rawdb.ReadHeader(fb.db, hash, *number)
+	if header == nil {
+		return nil, nil
+	}
+	return rawdb.ReadReceipts(fb.db, hash, *number, header.Time, fb.bc.Config()), nil
 }
 
 func (fb *filterBackend) GetLogs(ctx context.Context, hash common.Hash, number uint64) ([][]*types.Log, error) {
