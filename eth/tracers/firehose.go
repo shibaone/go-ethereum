@@ -146,7 +146,8 @@ func (f *Firehose) OnBlockEnd(err error) {
 
 	if err == nil {
 		f.ensureInBlockAndNotInTrx()
-		f.printBlockToFirehose(f.block, f.blockFinality)
+		// f.printBlockToFirehose(f.block, f.blockFinality)
+		_ = f.printBlockToFirehose
 	} else {
 		// An error occurred, could have happen in transaction/call context, we must not check if in trx/call, only check in block
 		f.ensureInBlock()
@@ -180,7 +181,9 @@ func (f *Firehose) CaptureTxStart(evm *vm.EVM, tx *types.Transaction, from commo
 		to = *tx.To()
 	}
 
-	f.captureTxStart(tx, tx.Hash(), from, to, evm.IsPrecompileAddr)
+	// evm.ChainConfig().Rules(f.block, isMerge bool, timestamp uint64)
+
+	f.captureTxStart(tx, tx.Hash(), from, to, func(addr common.Address) bool { return false })
 }
 
 // captureTxStart is used internally a two places, in the normal "tracer" and in the "OnGenesisBlock",
