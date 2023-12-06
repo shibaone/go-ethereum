@@ -1,4 +1,9 @@
 # Changelog
+## v1.3.4
+BUGFIX
+* fix: remove pipecommit in miner
+* add a hard fork: Hertzfix
+
 ## v1.3.3
 IMPROVEMENT
 * [\#2000](https://github.com/bnb-chain/bsc/pull/2000) cmd/utils: exit process if txlookuplimit flag is set
@@ -8,7 +13,7 @@ BUGFIX
 
 ## v1.3.2
 BUGFIX
-fix: remove sharedPool
+* fix: remove sharedPool
 
 ## v1.3.1
 FEATURE
@@ -63,7 +68,7 @@ IMPROVEMENT
 * [graphql: implement withdrawals (EIP-4895) (#27072)](https://github.com/bnb-chain/bsc/pull/1840/commits/fbe432fa1584bc976fe0242d999a7dd8903378b2)
 #### Client
 * [ethclient: add CallContractAtHash (#24355)](https://github.com/bnb-chain/bsc/pull/1700/commits/e98114da4feedf6dfb17b9839fc2c314cf1e5768)
-* [ethclient: add PeerCount method (#24849)](https://github.com/bnb-chain/bsc/pull/1840/commits/f5ff022dbca2b14af59974154874537b5ed4cc5e) 
+* [ethclient: add PeerCount method (#24849)](https://github.com/bnb-chain/bsc/pull/1840/commits/f5ff022dbca2b14af59974154874537b5ed4cc5e)
 * [ethereum, ethclient: add FeeHistory support (#25403)](https://github.com/bnb-chain/bsc/pull/1840/commits/9ad508018e4790da0c1c00ac355f206fca12ab7c)
 * [eth/filters, ethclient/gethclient: add fullTx option to pending tx fi…](https://github.com/bnb-chain/bsc/pull/1840/commits/5b1a04b9c749d804b51159fe12246c56de8515c1)
 * [ethclient: include withdrawals in ethclient block responses (#26778)](https://github.com/bnb-chain/bsc/pull/1840/commits/e1b98f49a5075694c5022f5ec74425e40da415dd)
