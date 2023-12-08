@@ -21,25 +21,7 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Install Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.20.x
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Build Binary
-        run: make bor
+      - uses: actions/checkout@v3
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2
@@ -65,7 +47,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
-          context: ./build/bin
+          context: .
           file: ./Dockerfile.fh
           push: true
           tags: ${{ steps.meta.outputs.tags }}
