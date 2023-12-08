@@ -1,19 +1,31 @@
-FROM golang:latest
+FROM golang:1.20-alpine as builder
 
-ARG BOR_DIR=/var/lib/bor
-ENV BOR_DIR=$BOR_DIR
+RUN apk add --no-cache make cmake gcc musl-dev linux-headers git bash build-base libc-dev
+# Get dependencies - will also be cached if we won't change go.mod/go.sum
+COPY go.mod /go-ethereum/
+COPY go.sum /go-ethereum/
+RUN cd /go-ethereum && go mod download
 
-RUN apt-get update -y && apt-get upgrade -y \
-    && apt install build-essential git -y \
-    && mkdir -p ${BOR_DIR}
+ADD . /go-ethereum
 
-WORKDIR ${BOR_DIR}
-COPY . .
-RUN make bor
+# For blst
+ENV CGO_CFLAGS="-O -D__BLST_PORTABLE__"
+ENV CGO_CFLAGS_ALLOW="-O -D__BLST_PORTABLE__"
+RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
 
-RUN cp build/bin/bor /usr/local/bin/geth
+# Pull Geth into a second stage deploy alpine container
+FROM alpine:3.17
+
+ENV PACKAGES ca-certificates jq \
+  bash bind-tools tini \
+  grep curl sed gcc
+
+RUN apk add --no-cache $PACKAGES \
+  && rm -rf /var/cache/apk/*
+
+RUN echo "[ ! -z \"\$TERM\" -a -r /etc/motd ] && cat /etc/motd" >> /etc/bash/bashrc
+
+COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
 
 ENV SHELL /bin/bash
 EXPOSE 8545 8546 8547 30303 30303/udp
-
-ENTRYPOINT ["geth"]
