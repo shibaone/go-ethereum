@@ -25,7 +25,7 @@ RUN apk add --no-cache $PACKAGES \
 
 RUN echo "[ ! -z \"\$TERM\" -a -r /etc/motd ] && cat /etc/motd" >> /etc/bash/bashrc
 
-COPY --from=builder /go-ethereum/build/bin/bor /usr/local/bin/
+COPY --from=builder /go-ethereum/build/bin/bor /usr/local/bin/geth
 
 ENV SHELL /bin/bash
 EXPOSE 8545 8546 8547 30303 30303/udp
