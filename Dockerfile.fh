@@ -11,7 +11,7 @@ ADD . /go-ethereum
 # For blst
 ENV CGO_CFLAGS="-O -D__BLST_PORTABLE__"
 ENV CGO_CFLAGS_ALLOW="-O -D__BLST_PORTABLE__"
-RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
+RUN cd /go-ethereum && make bor
 
 # Pull Geth into a second stage deploy alpine container
 FROM alpine:3.17
@@ -25,7 +25,7 @@ RUN apk add --no-cache $PACKAGES \
 
 RUN echo "[ ! -z \"\$TERM\" -a -r /etc/motd ] && cat /etc/motd" >> /etc/bash/bashrc
 
-COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
+COPY --from=builder /go-ethereum/build/bin/bor /usr/local/bin/
 
 ENV SHELL /bin/bash
 EXPOSE 8545 8546 8547 30303 30303/udp
