@@ -915,7 +915,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 
 	// Handle upgrade build-in system contract code
-	systemcontracts.UpgradeBuildInSystemContract(w.chainConfig, header.Number, env.state, firehose.NoOpContext)
+	systemcontracts.UpgradeBuildInSystemContract(w.chainConfig, header.Number, parent.Time, header.Time, env.state, firehose.NoOpContext)
 
 	return env, nil
 }

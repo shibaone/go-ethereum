@@ -611,7 +611,7 @@ func (bc *BlockChain) GetVMConfig() *vm.Config {
 	return &bc.vmConfig
 }
 
-func (bc *BlockChain) cacheReceipts(hash common.Hash, receipts types.Receipts) {
+func (bc *BlockChain) cacheReceipts(hash common.Hash, receipts types.Receipts, block *types.Block) {
 	// TODO, This is a hot fix for the block hash of logs is `0x0000000000000000000000000000000000000000000000000000000000000000` for system tx
 	// Please check details in https://github.com/bnb-chain/bsc/issues/443
 	// This is a temporary fix, the official fix should be a hard fork.
@@ -622,6 +622,16 @@ func (bc *BlockChain) cacheReceipts(hash common.Hash, receipts types.Receipts) {
 			receipts[i].Logs[j].BlockHash = hash
 		}
 	}
+
+	txs := block.Transactions()
+	if len(txs) != len(receipts) {
+		log.Warn("transaction and receipt count mismatch")
+		return
+	}
+	for i, receipt := range receipts {
+		receipt.EffectiveGasPrice = txs[i].EffectiveGasTipValue(block.BaseFee()) // basefee is supposed to be nil or zero
+	}
+
 	bc.receiptsCache.Add(hash, receipts)
 }
 
@@ -2140,7 +2150,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			firehoseContext.EndBlock(block, bc.CurrentFinalBlock(), td)
 		}
 
-		bc.cacheReceipts(block.Hash(), receipts)
+		bc.cacheReceipts(block.Hash(), receipts, block)
 		bc.cacheBlock(block.Hash(), block)
 
 		// Update the metrics touched during block processing and validation
@@ -2173,6 +2183,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		if err != nil {
 			return it.index, err
 		}
+
+		bc.cacheReceipts(block.Hash(), receipts, block)
+
 		// Update the metrics touched during block commit
 		accountCommitTimer.Update(statedb.AccountCommits)   // Account commits are complete, we can mark them
 		storageCommitTimer.Update(statedb.StorageCommits)   // Storage commits are complete, we can mark them

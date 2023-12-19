@@ -1126,19 +1126,19 @@ func TestDeleteStorage(t *testing.T) {
 		addr     = common.HexToAddress("0x1")
 	)
 	// Initialize account and populate storage
-	state.SetBalance(addr, big.NewInt(1))
-	state.CreateAccount(addr)
+	state.SetBalance(addr, big.NewInt(1), firehose.NoOpContext, firehose.IgnoredBalanceChangeReason)
+	state.CreateAccount(addr, firehose.NoOpContext)
 	for i := 0; i < 1000; i++ {
 		slot := common.Hash(uint256.NewInt(uint64(i)).Bytes32())
 		value := common.Hash(uint256.NewInt(uint64(10 * i)).Bytes32())
-		state.SetState(addr, slot, value)
+		state.SetState(addr, slot, value, firehose.NoOpContext)
 	}
 	root, _, _ := state.Commit(0, nil)
 	// Init phase done, create two states, one with snap and one without
 	fastState, _ := New(root, db, snaps)
 	slowState, _ := New(root, db, nil)
 
-	obj := fastState.GetOrNewStateObject(addr)
+	obj := fastState.GetOrNewStateObject(addr, false, firehose.NoOpContext)
 	storageRoot := obj.data.Root
 
 	_, _, fastNodes, err := fastState.deleteStorage(addr, crypto.Keccak256Hash(addr[:]), storageRoot)
