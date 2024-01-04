@@ -183,6 +183,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	var (
 		vmConfig = vm.Config{
 			EnablePreimageRecording: config.EnablePreimageRecording,
+			Tracer:                  config.VMTracer,
 		}
 		cacheConfig = &core.CacheConfig{
 

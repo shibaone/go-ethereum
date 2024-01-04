@@ -36,7 +36,7 @@ func TestInvalidCliqueConfig(t *testing.T) {
 	block := DefaultGoerliGenesisBlock()
 	block.ExtraData = []byte{}
 	db := rawdb.NewMemoryDatabase()
-	if _, err := block.Commit(db, trie.NewDatabase(db)); err == nil {
+	if _, err := block.Commit(db, trie.NewDatabase(db), nil); err == nil {
 		t.Fatal("Expected error on invalid clique config")
 	}
 }
@@ -88,8 +88,9 @@ func TestSetupGenesis(t *testing.T) {
 		{
 			name: "custom block in DB, genesis == nil",
 			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
-				customg.MustCommit(db)
-				return SetupGenesisBlock(db, trie.NewDatabase(db), nil)
+				tdb := trie.NewDatabase(db)
+				customg.Commit(db, tdb, nil)
+				return SetupGenesisBlock(db, tdb, nil)
 			},
 			wantHash:   customghash,
 			wantConfig: customg.Config,
@@ -97,8 +98,9 @@ func TestSetupGenesis(t *testing.T) {
 		{
 			name: "custom block in DB, genesis == goerli",
 			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
-				customg.MustCommit(db)
-				return SetupGenesisBlock(db, trie.NewDatabase(db), DefaultGoerliGenesisBlock())
+				tdb := trie.NewDatabase(db)
+				customg.Commit(db, tdb, nil)
+				return SetupGenesisBlock(db, tdb, DefaultGoerliGenesisBlock())
 			},
 			wantErr:    &GenesisMismatchError{Stored: customghash, New: params.GoerliGenesisHash},
 			wantHash:   params.GoerliGenesisHash,
@@ -107,8 +109,9 @@ func TestSetupGenesis(t *testing.T) {
 		{
 			name: "compatible config in DB",
 			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
-				oldcustomg.MustCommit(db)
-				return SetupGenesisBlock(db, trie.NewDatabase(db), &customg)
+				tdb := trie.NewDatabase(db)
+				oldcustomg.Commit(db, tdb, nil)
+				return SetupGenesisBlock(db, tdb, &customg)
 			},
 			wantHash:   customghash,
 			wantConfig: customg.Config,

@@ -20,6 +20,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -249,7 +250,9 @@ func opKeccak256(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	if evm.Config.EnablePreimageRecording {
 		evm.StateDB.AddPreimage(interpreter.hasherBuf, data)
 	}
-
+	if interpreter.evm.Config.Tracer != nil {
+		interpreter.evm.Config.Tracer.CaptureKeccakPreimage(common.BytesToHash(interpreter.hasherBuf[:]), data)
+	}
 	size.SetBytes(interpreter.hasherBuf[:])
 	return nil, nil
 }
@@ -605,7 +608,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	// reuse size int for stackvalue
 	stackvalue := size
 
-	scope.Contract.UseGas(gas)
+	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer, GasChangeCallContractCreation)
 	//TODO: use uint256.Int instead of converting with toBig()
 	var bigVal = big0
 	if !value.IsZero() {
@@ -625,6 +628,11 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 		stackvalue.SetBytes(addr.Bytes())
 	}
 	scope.Stack.push(&stackvalue)
+
+	if interpreter.evm.Config.Tracer != nil && returnGas > 0 {
+		interpreter.evm.Config.Tracer.OnGasChange(scope.Contract.Gas, scope.Contract.Gas+returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	if suberr == ErrExecutionReverted {
@@ -648,7 +656,7 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	)
 	// Apply EIP150
 	gas -= gas / 64
-	scope.Contract.UseGas(gas)
+	scope.Contract.UseGas(gas, interpreter.evm.Config.Tracer, GasChangeCallContractCreation2)
 	// reuse size int for stackvalue
 	stackvalue := size
 	//TODO: use uint256.Int instead of converting with toBig()
@@ -665,6 +673,11 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 		stackvalue.SetBytes(addr.Bytes())
 	}
 	scope.Stack.push(&stackvalue)
+
+	if interpreter.evm.Config.Tracer != nil && returnGas > 0 {
+		interpreter.evm.Config.Tracer.OnGasChange(scope.Contract.Gas, scope.Contract.Gas+returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	if suberr == ErrExecutionReverted {
@@ -710,6 +723,11 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil && returnGas > 0 {
+		interpreter.evm.Config.Tracer.OnGasChange(scope.Contract.Gas, scope.Contract.Gas+returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -745,6 +763,11 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil && returnGas > 0 {
+		interpreter.evm.Config.Tracer.OnGasChange(scope.Contract.Gas, scope.Contract.Gas+returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -773,6 +796,11 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil && returnGas > 0 {
+		interpreter.evm.Config.Tracer.OnGasChange(scope.Contract.Gas, scope.Contract.Gas+returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -801,6 +829,11 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 	if err == nil || err == ErrExecutionReverted {
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	if interpreter.evm.Config.Tracer != nil && returnGas > 0 {
+		interpreter.evm.Config.Tracer.OnGasChange(scope.Contract.Gas, scope.Contract.Gas+returnGas, GasChangeCallLeftOverRefunded)
+	}
+
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
@@ -836,7 +869,7 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	}
 	beneficiary := scope.Stack.pop()
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
-	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance)
+	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance, state.BalanceIncreaseSelfdestruct)
 	interpreter.evm.StateDB.SelfDestruct(scope.Contract.Address())
 	if beneficiary.Bytes20() == scope.Contract.Address() {
 		// Arbitrum: calling selfdestruct(this) burns the balance
@@ -855,8 +888,8 @@ func opSelfdestruct6780(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCon
 	}
 	beneficiary := scope.Stack.pop()
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
-	interpreter.evm.StateDB.SubBalance(scope.Contract.Address(), balance)
-	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance)
+	interpreter.evm.StateDB.SubBalance(scope.Contract.Address(), balance, state.BalanceDecreaseSelfdestruct)
+	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance, state.BalanceIncreaseSelfdestruct)
 	interpreter.evm.StateDB.Selfdestruct6780(scope.Contract.Address())
 	if tracer := interpreter.evm.Config.Tracer; tracer != nil {
 		tracer.CaptureEnter(SELFDESTRUCT, scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance)

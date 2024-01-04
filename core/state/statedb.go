@@ -57,6 +57,22 @@ func (n *proofList) Delete(key []byte) error {
 	panic("not supported")
 }
 
+// StateLogger is used to collect state update traces from  EVM transaction
+// execution.
+// The following hooks are invoked post execution. I.e. looking up state
+// after the hook should reflect the new value.
+// Note that reference types are actual VM data structures; make copies
+// if you need to retain them beyond the current call.
+type StateLogger interface {
+	OnBalanceChange(addr common.Address, prev, new *big.Int, reason BalanceChangeReason)
+	OnNonceChange(addr common.Address, prev, new uint64)
+	OnCodeChange(addr common.Address, prevCodeHash common.Hash, prevCode []byte, codeHash common.Hash, code []byte)
+	OnStorageChange(addr common.Address, slot common.Hash, prev, new common.Hash)
+	OnLog(log *types.Log)
+	// OnNewAccount is called when a new account is created.
+	OnNewAccount(addr common.Address)
+}
+
 // StateDB structs within the ethereum protocol are used to store anything
 // within the merkle trie. StateDBs take care of caching and storing
 // nested states. It's the general query interface to retrieve:
@@ -76,6 +92,7 @@ type StateDB struct {
 	prefetcher *triePrefetcher
 	trie       Trie
 	hasher     crypto.KeccakState
+	logger     StateLogger
 	snaps      *snapshot.Tree    // Nil if snapshot is not available
 	snap       snapshot.Snapshot // Nil if snapshot is not available
 
@@ -117,6 +134,9 @@ type StateDB struct {
 
 	// Preimages occurred seen by VM in the scope of block.
 	preimages map[common.Hash][]byte
+
+	// Enabled precompile contracts
+	precompiles map[common.Address]struct{}
 
 	// Per-transaction access list
 	accessList *accessList
@@ -175,6 +195,7 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		stateObjectsDestruct: make(map[common.Address]*types.StateAccount),
 		logs:                 make(map[common.Hash][]*types.Log),
 		preimages:            make(map[common.Hash][]byte),
+		precompiles:          make(map[common.Address]struct{}),
 		journal:              newJournal(),
 		accessList:           newAccessList(),
 		transientStorage:     newTransientStorage(),
@@ -193,6 +214,11 @@ func NewDeterministic(root common.Hash, db Database) (*StateDB, error) {
 	}
 	sdb.deterministic = true
 	return sdb, nil
+}
+
+// SetLogger sets the logger for account update hooks.
+func (s *StateDB) SetLogger(l StateLogger) {
+	s.logger = l
 }
 
 // StartPrefetcher initializes a new trie prefetcher to pull in nodes from the
@@ -235,6 +261,9 @@ func (s *StateDB) AddLog(log *types.Log) {
 	log.TxHash = s.thash
 	log.TxIndex = uint(s.txIndex)
 	log.Index = s.logSize
+	if s.logger != nil {
+		s.logger.OnLog(log)
+	}
 	s.logs[s.thash] = append(s.logs[s.thash], log)
 	s.logSize++
 }
@@ -429,24 +458,24 @@ func (s *StateDB) HasSelfDestructed(addr common.Address) bool {
  */
 
 // AddBalance adds amount to the account associated with addr.
-func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
+func (s *StateDB) AddBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
-		stateObject.AddBalance(amount)
+		stateObject.AddBalance(amount, reason)
 	}
 }
 
 // SubBalance subtracts amount from the account associated with addr.
-func (s *StateDB) SubBalance(addr common.Address, amount *big.Int) {
+func (s *StateDB) SubBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, amount)
-		stateObject.SubBalance(amount)
+		stateObject.SubBalance(amount, reason)
 	}
 }
 
-func (s *StateDB) SetBalance(addr common.Address, amount *big.Int) {
+func (s *StateDB) SetBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		if amount == nil {
@@ -455,7 +484,7 @@ func (s *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 		prevBalance := stateObject.Balance()
 		s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
 		s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, prevBalance)
-		stateObject.SetBalance(amount)
+		stateObject.SetBalance(amount, reason)
 	}
 }
 
@@ -518,16 +547,22 @@ func (s *StateDB) SelfDestruct(addr common.Address) {
 	if stateObject == nil {
 		return
 	}
+	var (
+		prev = new(big.Int).Set(stateObject.Balance())
+		n    = new(big.Int)
+	)
 	s.journal.append(selfDestructChange{
 		account:     &addr,
 		prev:        stateObject.selfDestructed,
-		prevbalance: new(big.Int).Set(stateObject.Balance()),
+		prevbalance: prev,
 	})
-
+	if s.logger != nil {
+		s.logger.OnBalanceChange(addr, prev, n, BalanceDecreaseSelfdestruct)
+	}
 	stateObject.markSelfdestructed()
 	s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, stateObject.data.Balance)
 
-	stateObject.data.Balance = new(big.Int)
+	stateObject.data.Balance = n
 }
 
 func (s *StateDB) Selfdestruct6780(addr common.Address) {
@@ -704,6 +739,13 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	newobj = newObject(s, addr, nil)
 	if prev == nil {
 		s.journal.append(createObjectChange{account: &addr})
+		if s.logger != nil {
+			// Precompiled contracts are touched during a call.
+			// Make sure we avoid emitting a new account event for them.
+			if _, ok := s.precompiles[addr]; !ok {
+				s.logger.OnNewAccount(addr)
+			}
+		}
 	} else {
 		// The original account should be marked as destructed and all cached
 		// account and storage data should be cleared as well. Note, it must
@@ -951,6 +993,10 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		if obj.selfDestructed || (deleteEmptyObjects && obj.empty()) {
 			obj.deleted = true
 
+			// If ether was sent to account post-selfdestruct it is burnt.
+			if bal := obj.Balance(); bal.Sign() != 0 && s.logger != nil {
+				s.logger.OnBalanceChange(obj.address, bal, new(big.Int), BalanceDecreaseSelfdestructBurn)
+			}
 			// We need to maintain account deletions explicitly (will remain
 			// set indefinitely). Note only the first occurred self-destruct
 			// event is tracked.
@@ -1389,6 +1435,14 @@ func (s *StateDB) Prepare(rules params.Rules, sender, coinbase common.Address, d
 	}
 	// Reset transient storage at the beginning of transaction execution
 	s.transientStorage = newTransientStorage()
+}
+
+// PrepareBlock prepares the statedb for execution of a block. It tracks
+// the addresses of enabled precompiles for debugging purposes.
+func (s *StateDB) PrepareBlock(precompiles []common.Address) {
+	for _, addr := range precompiles {
+		s.precompiles[addr] = struct{}{}
+	}
 }
 
 // AddAddressToAccessList adds the given address to the access list

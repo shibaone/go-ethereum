@@ -87,6 +87,11 @@ func (b *BlockGen) SetPoS() {
 	b.header.Difficulty = new(big.Int)
 }
 
+// Difficulty returns the currently calculated difficulty of the block.
+func (b *BlockGen) Difficulty() *big.Int {
+	return new(big.Int).Set(b.header.Difficulty)
+}
+
 // addTx adds a transaction to the generated block. If no coinbase has
 // been set, the block's coinbase is set to the zero address.
 //
@@ -351,7 +356,10 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 // then generate chain on top.
 func GenerateChainWithGenesis(genesis *Genesis, engine consensus.Engine, n int, gen func(int, *BlockGen)) (ethdb.Database, []*types.Block, []types.Receipts) {
 	db := rawdb.NewMemoryDatabase()
-	_, err := genesis.Commit(db, trie.NewDatabase(db))
+
+	triedb := trie.NewDatabase(db)
+	defer triedb.Close()
+	_, err := genesis.Commit(db, triedb, nil)
 	if err != nil {
 		panic(err)
 	}
