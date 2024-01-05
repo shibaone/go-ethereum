@@ -2,7 +2,6 @@ package tracers
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -264,7 +263,7 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 
 	// Sorting needs to happen first, before we populate the state reverted
 	slices.SortFunc(f.transaction.Calls, func(i, j *pbeth.Call) int {
-		return cmp.Compare(i.Index, j.Index)
+		return Compare(i.Index, j.Index)
 	})
 
 	rootCall := f.transaction.Calls[0]
@@ -347,7 +346,7 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 	}
 
 	slices.SortFunc(callLogs, func(i, j *pbeth.Log) int {
-		return cmp.Compare(i.Ordinal, j.Ordinal)
+		return Compare(i.Ordinal, j.Ordinal)
 	})
 
 	if len(callLogs) != len(receiptsLogs) {
@@ -1734,4 +1733,58 @@ func validateField[T any](into *validationResult, field string, a, b T, equal bo
 	if !equal {
 		into.failures = append(into.failures, fmt.Sprintf("%s [(actual) %s %s %s (expected)]", field, toString(a), "!=", toString(b)))
 	}
+}
+
+// This is copied from https://cs.opensource.google/go/go/+/refs/tags/go1.21.0:src/cmp/cmp.go
+// allows building without go 1.21
+// Ordered is a constraint that permits any ordered type: any type
+// that supports the operators < <= >= >.
+// If future releases of Go add new ordered types,
+// this constraint will be modified to include them.
+//
+// Note that floating-point types may contain NaN ("not-a-number") values.
+// An operator such as == or < will always report false when
+// comparing a NaN value with any other value, NaN or not.
+// See the [Compare] function for a consistent way to compare NaN values.
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64 |
+		~string
+}
+
+// Less reports whether x is less than y.
+// For floating-point types, a NaN is considered less than any non-NaN,
+// and -0.0 is not less than (is equal to) 0.0.
+func Less[T Ordered](x, y T) bool {
+	return (isNaN(x) && !isNaN(y)) || x < y
+}
+
+// Compare returns
+//
+//	-1 if x is less than y,
+//	 0 if x equals y,
+//	+1 if x is greater than y.
+//
+// For floating-point types, a NaN is considered less than any non-NaN,
+// a NaN is considered equal to a NaN, and -0.0 is equal to 0.0.
+func Compare[T Ordered](x, y T) int {
+	xNaN := isNaN(x)
+	yNaN := isNaN(y)
+	if xNaN && yNaN {
+		return 0
+	}
+	if xNaN || x < y {
+		return -1
+	}
+	if yNaN || x > y {
+		return +1
+	}
+	return 0
+}
+
+// isNaN reports whether x is a NaN without requiring the math package.
+// This will always return false if T is not floating-point.
+func isNaN[T Ordered](x T) bool {
+	return x != x
 }
