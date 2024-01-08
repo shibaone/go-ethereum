@@ -1113,9 +1113,12 @@ func transactionTypeFromChainTxType(txType uint8) pbeth.TransactionTrace_Type {
 		return pbeth.TransactionTrace_TRX_TYPE_DYNAMIC_FEE
 	case types.LegacyTxType:
 		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
-	// Add when enabled in a fork
-	// case types.BlobTxType:
-	// 	return pbeth.TransactionTrace_TRX_TYPE_BLOB
+		// Add when enabled in a fork
+	case types.BlobTxType:
+		panic("blobs tx type not supported yet")
+	case types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
+
 	default:
 		panic(fmt.Errorf("unknown transaction type %d", txType))
 	}
@@ -1287,7 +1290,7 @@ func gasChangeReasonFromChain(reason vm.GasChangeReason) pbeth.GasChange_Reason 
 
 func maxFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 	switch tx.Type() {
-	case types.LegacyTxType, types.AccessListTxType:
+	case types.LegacyTxType, types.AccessListTxType, types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
 		return nil
 
 	case types.DynamicFeeTxType, types.BlobTxType:
@@ -1300,7 +1303,7 @@ func maxFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 
 func maxPriorityFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 	switch tx.Type() {
-	case types.LegacyTxType, types.AccessListTxType:
+	case types.LegacyTxType, types.AccessListTxType, types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
 		return nil
 
 	case types.DynamicFeeTxType, types.BlobTxType:
@@ -1312,7 +1315,7 @@ func maxPriorityFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 
 func gasPrice(tx *types.Transaction, baseFee *big.Int) *pbeth.BigInt {
 	switch tx.Type() {
-	case types.LegacyTxType, types.AccessListTxType:
+	case types.LegacyTxType, types.AccessListTxType, types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
 		return firehoseBigIntFromNative(tx.GasPrice())
 
 	case types.DynamicFeeTxType, types.BlobTxType:
@@ -1662,10 +1665,17 @@ var sanitizeRegexp = regexp.MustCompile(`[\t( ){2,}]+`)
 
 func staticFirehoseChainValidationOnInit() {
 	firehoseKnownTxTypes := map[byte]bool{
-		types.LegacyTxType:     true,
-		types.AccessListTxType: true,
-		types.DynamicFeeTxType: true,
-		types.BlobTxType:       true,
+		types.LegacyTxType:                  true,
+		types.AccessListTxType:              true,
+		types.DynamicFeeTxType:              true,
+		types.BlobTxType:                    true,
+		types.ArbitrumDepositTxType:         true,
+		types.ArbitrumUnsignedTxType:        true,
+		types.ArbitrumContractTxType:        true,
+		types.ArbitrumRetryTxType:           true,
+		types.ArbitrumSubmitRetryableTxType: true,
+		types.ArbitrumInternalTxType:        true,
+		types.ArbitrumLegacyTxType:          true,
 	}
 
 	for txType := byte(0); txType < 255; txType++ {
