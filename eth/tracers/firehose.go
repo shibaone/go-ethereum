@@ -347,12 +347,18 @@ func (f *Firehose) removeLogBlockIndexOnStateRevertedCalls() {
 }
 
 func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
+	firehoseTrace("assigning ordinal and index to logs")
+	defer func() {
+		firehoseTrace("assigning ordinal and index to logs terminated")
+	}()
+
 	trx := f.transaction
 
 	receiptsLogs := trx.Receipt.Logs
 
 	callLogs := []*pbeth.Log{}
 	for _, call := range trx.Calls {
+		firehoseTrace("checking call reverted=%t logs=%d", call.StateReverted, len(call.Logs))
 		if call.StateReverted {
 			continue
 		}
