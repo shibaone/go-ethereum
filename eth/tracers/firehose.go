@@ -1665,17 +1665,18 @@ var sanitizeRegexp = regexp.MustCompile(`[\t( ){2,}]+`)
 
 func staticFirehoseChainValidationOnInit() {
 	firehoseKnownTxTypes := map[byte]bool{
-		types.LegacyTxType:                  true,
-		types.AccessListTxType:              true,
-		types.DynamicFeeTxType:              true,
-		types.BlobTxType:                    true,
-		types.ArbitrumDepositTxType:         true,
-		types.ArbitrumUnsignedTxType:        true,
-		types.ArbitrumContractTxType:        true,
-		types.ArbitrumRetryTxType:           true,
-		types.ArbitrumSubmitRetryableTxType: true,
-		types.ArbitrumInternalTxType:        true,
-		types.ArbitrumLegacyTxType:          true,
+		types.LegacyTxType:     true,
+		types.AccessListTxType: true,
+		types.DynamicFeeTxType: true,
+		types.BlobTxType:       true,
+		// these generate an error when trying to EncodeRLP
+		//types.ArbitrumDepositTxType:         true,
+		//types.ArbitrumUnsignedTxType:        true,
+		//types.ArbitrumContractTxType:        true,
+		//types.ArbitrumRetryTxType:           true,
+		//types.ArbitrumSubmitRetryableTxType: true,
+		//types.ArbitrumInternalTxType:        true,
+		//types.ArbitrumLegacyTxType:          true,
 	}
 
 	for txType := byte(0); txType < 255; txType++ {
