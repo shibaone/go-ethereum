@@ -59,6 +59,7 @@ require (
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible
 	github.com/spf13/pflag v1.0.5
 	github.com/status-im/keycard-go v0.2.0
+	github.com/streamingfast/eth-go v0.0.0-20220421042603-ebe2c94fcc92
 	github.com/streamingfast/firehose-ethereum/types v0.0.0-20230912180331-359d900a4e1e
 	github.com/stretchr/testify v1.8.1
 	github.com/supranational/blst v0.3.11
@@ -150,7 +151,6 @@ require (
 	github.com/streamingfast/dgrpc v0.0.0-20220909121013-162e9305bbfc // indirect
 	github.com/streamingfast/dmetrics v0.0.0-20210811180524-8494aeb34447 // indirect
 	github.com/streamingfast/dstore v0.1.1-0.20220607202639-35118aeaf648 // indirect
-	github.com/streamingfast/eth-go v0.0.0-20220421042603-ebe2c94fcc92 // indirect
 	github.com/streamingfast/jsonpb v0.0.0-20210811021341-3670f0aa02d0 // indirect
 	github.com/streamingfast/logging v0.0.0-20220304214715-bc750a74b424 // indirect
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect

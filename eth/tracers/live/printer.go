@@ -137,3 +137,7 @@ func (*Printer) CaptureArbitrumStorageGet(key common.Hash, depth int, before boo
 func (*Printer) CaptureArbitrumStorageSet(key, value common.Hash, depth int, before bool) {}
 func (*Printer) CaptureArbitrumTransfer(env *vm.EVM, from, to *common.Address, value *big.Int, before bool, purpose string) {
 }
+
+func (f *Printer) OnBlockUpdate(b *types.Block, td *big.Int) {
+	fmt.Printf("OnBlockUpdate: b=%v, td=%v\n", b.NumberU64(), td)
+}
