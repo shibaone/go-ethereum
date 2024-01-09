@@ -1504,6 +1504,9 @@ func (d *DeferredCallState) Reset() {
 	d.accountCreations = nil
 	d.balanceChanges = nil
 	d.gasChanges = nil
+	d.storageChanges = nil
+	d.logs = nil
+	d.accountCreations = nil
 	d.nonceChanges = nil
 }
 
