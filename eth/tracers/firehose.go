@@ -752,6 +752,12 @@ func (f *Firehose) newBalanceChange(tag string, address common.Address, oldValue
 }
 
 func (f *Firehose) OnNonceChange(a common.Address, prev, new uint64) {
+	// important: NonceChange is sometimes called with prev==new outside of any transaction
+	if new == prev {
+		firehoseDebug("skipping NonceChange new==prev (%d)", prev)
+		return
+	}
+
 	f.ensureInBlockAndInTrx()
 
 	activeCall := f.callStack.Peek()
