@@ -1122,8 +1122,20 @@ func transactionTypeFromChainTxType(txType uint8) pbeth.TransactionTrace_Type {
 		// Add when enabled in a fork
 	case types.BlobTxType:
 		panic("blobs tx type not supported yet")
-	case types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
-		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
+	case types.ArbitrumDepositTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_DEPOSIT
+	case types.ArbitrumUnsignedTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_UNSIGNED
+	case types.ArbitrumContractTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_CONTRACT
+	case types.ArbitrumRetryTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_RETRY
+	case types.ArbitrumSubmitRetryableTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_SUBMIT_RETRYABLE
+	case types.ArbitrumInternalTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_INTERNAL
+	case types.ArbitrumLegacyTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_LEGACY
 
 	default:
 		panic(fmt.Errorf("unknown transaction type %d", txType))
