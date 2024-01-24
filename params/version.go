@@ -23,7 +23,7 @@ import (
 const (
 	VersionMajor = 1       // Major version component of the current release
 	VersionMinor = 2       // Minor version component of the current release
-	VersionPatch = 2       // Patch version component of the current release
+	VersionPatch = 3       // Patch version component of the current release
 	VersionMeta  = "fh2.3" // Version metadata to append to the version string
 
 	FirehoseVersionMajor = 2
@@ -57,7 +57,7 @@ var VersionWithMetaCommitDetails = func() string {
 	if VersionMeta != "" {
 		v += "-" + VersionMeta
 	}
-	v_git := fmt.Sprintf("Version: %s\nGitCommit: %s", v, GitCommit)
+	v_git := fmt.Sprintf("Version: %s\nGitCommit: %s\nFirehose Protocol: %s", v, GitCommit, FirehoseVersion())
 	return v_git
 }()
 
