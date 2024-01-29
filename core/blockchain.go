@@ -2071,7 +2071,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 				firehoseContext.FinalizeBlock(block)
 				ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 				td := new(big.Int).Add(block.Difficulty(), ptd)
-				firehoseContext.EndBlock(block, bc.CurrentFinalBlock(), td)
+				finalBlock := getFinalBlockForFirehose(bc, block)
+				firehoseContext.EndBlock(block, finalBlock, td)
 			}
 
 			stats.processed++
@@ -2147,7 +2148,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			// Calculate the total difficulty of the block
 			ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 			td := new(big.Int).Add(block.Difficulty(), ptd)
-			firehoseContext.EndBlock(block, bc.CurrentFinalBlock(), td)
+			finalBlock := getFinalBlockForFirehose(bc, block)
+			firehoseContext.EndBlock(block, finalBlock, td)
 		}
 
 		bc.cacheReceipts(block.Hash(), receipts, block)
@@ -2200,7 +2202,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		stats.usedGas += usedGas
 
 		trieDiffNodes, trieBufNodes, trieImmutableBufNodes, _ := bc.triedb.Size()
-		stats.report(chain, it.index, trieDiffNodes, trieBufNodes, trieImmutableBufNodes, setHead)
+		stats.report(chain, it.index, trieDiffNodes, trieBufNodes, trieImmutableBufNodes, setHead, bc.CurrentFinalBlock())
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count
@@ -3198,4 +3200,15 @@ func (bc *BlockChain) SetTrieFlushInterval(interval time.Duration) {
 // GetTrieFlushInterval gets the in-memroy tries flush interval
 func (bc *BlockChain) GetTrieFlushInterval() time.Duration {
 	return time.Duration(bc.flushInterval.Load())
+}
+
+// getFinalBlockForFirehose returns the current final block unless it is
+// not canonical, then it returns nil
+func getFinalBlockForFirehose(bc *BlockChain, block *types.Block) *types.Header {
+	if canon := bc.GetBlockByNumber(block.NumberU64()); canon != nil {
+		if canon.Hash() != block.Hash() { // block is not canonical, we ignore the final block indication
+			return nil
+		}
+	}
+	return bc.CurrentFinalBlock()
 }

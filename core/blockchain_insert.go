@@ -39,7 +39,7 @@ const statsReportLimit = 8 * time.Second
 
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
-func (st *insertStats) report(chain []*types.Block, index int, trieDiffNodes, trieBufNodes, trieImmutableBufNodes common.StorageSize, setHead bool) {
+func (st *insertStats) report(chain []*types.Block, index int, trieDiffNodes, trieBufNodes, trieImmutableBufNodes common.StorageSize, setHead bool, final *types.Header) {
 	// Fetch the timings for the batch
 	var (
 		now     = mclock.Now()
@@ -78,6 +78,9 @@ func (st *insertStats) report(chain []*types.Block, index int, trieDiffNodes, tr
 			context = append(context, []interface{}{"ignored", st.ignored}...)
 		}
 		if setHead {
+			if final != nil {
+				context = append(context, []interface{}{"final_number", final.Number, "final_hash", final.Hash()}...)
+			}
 			log.Info("Imported new chain segment", context...)
 		} else {
 			log.Info("Imported new potential chain segment", context...)
