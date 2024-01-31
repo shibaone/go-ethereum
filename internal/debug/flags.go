@@ -91,8 +91,9 @@ var (
 		Category: flags.LoggingCategory,
 	}
 	logRotateFlag = &cli.BoolFlag{
-		Name:  "log.rotate",
-		Usage: "Enables log file rotation",
+		Name:     "log.rotate",
+		Usage:    "Enables log file rotation",
+		Category: flags.LoggingCategory,
 	}
 	logMaxSizeMBsFlag = &cli.IntFlag{
 		Name:     "log.maxsize",
