@@ -1765,6 +1765,22 @@ func (p *Parlia) applyTransaction(
 	}
 
 	*receipts = append(*receipts, receipt)
+
+	// Since version v1.3.9 of BNB, this call is not made here anymore and has instead been
+	// moved in the 'applyMessage' execution (so just before execution the EVM). This change
+	// was made to better align with normal Geth behavior that increment the nonce before
+	// executing the transaction.
+	//
+	// This was deemed safe by the BNB team as (see https://github.com/bnb-chain/bsc/pull/2185#issue-2101558627)
+	// since the way system transaction are done, it cannot affects any execution.
+	//
+	// However, this breaks Firehose determinisn because the nonce will be attached to a different
+	// execution position than before. All ordinals will change from that point leading to a cascade
+	// of diffences.
+	//
+	// For Firehose fork, we keep the `SetNonce` here to keep the same behavior as before.
+	//
+	// Search linked comment c2456b4c5a0b307ab07ed8080550b8adb74337e5 in the BNB codebase for more details.
 	state.SetNonce(msg.From(), nonce+1, firehoseContext)
 	return nil
 }
@@ -1989,7 +2005,14 @@ func applyMessage(
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, vm.TxContext{Origin: msg.From(), GasPrice: big.NewInt(0)}, state, chainConfig, vm.Config{}, firehoseContext)
-	// Apply the transaction to the current state (included in the env)
+	// This is commented out in Firehose fork, to ensure we keep the same Firehose behavior as before.
+	// Only one SetNonce must be called in the chain `applyTransaction -> applyMessage` so the code
+	// below is commented out.
+	//
+	// We keep it commented out so future updates that touch this location will generate a diff.
+	//
+	// Search linked comment c2456b4c5a0b307ab07ed8080550b8adb74337e5 in the BNB codebase for more details.
+	// state.SetNonce(msg.From(), state.GetNonce(msg.From())+1)
 	ret, returnGas, err := vmenv.Call(
 		vm.AccountRef(msg.From()),
 		*msg.To(),
