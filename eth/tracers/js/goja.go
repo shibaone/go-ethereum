@@ -275,12 +275,24 @@ func (t *jsTracer) CaptureStart(from common.Address, to common.Address, create b
 		return
 	}
 	t.ctx["input"] = inputVal
-	valueBig, err := t.toBig(t.vm, value.String())
-	if err != nil {
-		t.err = err
-		return
-	}
-	t.ctx["value"] = valueBig
+	/*
+		t.ctx["from"] = t.vm.ToValue(from.Bytes())
+		t.ctx["to"] = t.vm.ToValue(to.Bytes())
+		t.ctx["input"] = t.vm.ToValue(input)
+		t.ctx["gas"] = t.vm.ToValue(t.gasLimit)
+		gasPriceBig, err := t.toBig(t.vm, env.TxContext.GasPrice.String())
+		if err != nil {
+			t.err = err
+			return
+		}
+		t.ctx["gasPrice"] = gasPriceBig
+		valueBig, err := t.toBig(t.vm, value.String())
+		if err != nil {
+			t.err = err
+			return
+		}
+		t.ctx["value"] = valueBig
+	*/
 }
 
 // CaptureState implements the Tracer interface to trace a single step of VM execution.
@@ -503,7 +515,7 @@ func (t *jsTracer) setBuiltinFunctions() {
 		addr := common.BytesToAddress(a)
 		for _, p := range t.activePrecompiles {
 			space := new(big.Int).SetUint64(0x65)
-			arbOS := p.Hash().Big().Cmp(space) >= 0
+			arbOS := p.Big().Cmp(space) >= 0
 			if p == addr && arbOS {
 				return true
 			}

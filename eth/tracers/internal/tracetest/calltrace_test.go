@@ -150,9 +150,16 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 					GasLimit:    uint64(test.Context.GasLimit),
 					BaseFee:     test.Genesis.BaseFee,
 				}
-				_, statedb = tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false)
+				//triedb, _, statedb = tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
+				_, _, statedb = tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
 			)
+			//<<<<<<< HEAD
 			tracer, err := directory.DefaultDirectory.New(tracerName, new(directory.Context), test.TracerConfig)
+			//=======
+			//triedb.Close()
+
+			//tracer, err := tracers.DefaultDirectory.New(tracerName, new(tracers.Context), test.TracerConfig)
+			//>>>>>>> 657dcf6
 			if err != nil {
 				t.Fatalf("failed to create call tracer: %v", err)
 			}
@@ -253,7 +260,8 @@ func benchTracer(tracerName string, test *callTracerTest, b *testing.B) {
 		Difficulty:  (*big.Int)(test.Context.Difficulty),
 		GasLimit:    uint64(test.Context.GasLimit),
 	}
-	_, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false)
+	triedb, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
+	defer triedb.Close()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -380,7 +388,8 @@ func TestInternals(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(),
+			//triedb, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(),
+			_, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(),
 				core.GenesisAlloc{
 					to: core.GenesisAccount{
 						Code: tc.code,
@@ -388,7 +397,8 @@ func TestInternals(t *testing.T) {
 					origin: core.GenesisAccount{
 						Balance: big.NewInt(500000000000000),
 					},
-				}, false)
+					//<<<<<<< HEAD
+				}, false, rawdb.HashScheme)
 			statedb.SetLogger(tc.tracer)
 			tx, err := types.SignNewTx(key, signer, &types.LegacyTx{
 				To:       &to,
@@ -398,6 +408,21 @@ func TestInternals(t *testing.T) {
 			})
 			if err != nil {
 				t.Fatalf("test %v: failed to sign transaction: %v", tc.name, err)
+				//=======
+				//				}, false, rawdb.HashScheme)
+				//			defer triedb.Close()
+				//
+				//			evm := vm.NewEVM(context, txContext, statedb, params.MainnetChainConfig, vm.Config{Tracer: tc.tracer})
+				//			msg := &core.Message{
+				//				To:                &to,
+				//				From:              origin,
+				//				Value:             big.NewInt(0),
+				//				GasLimit:          80000,
+				//				GasPrice:          big.NewInt(0),
+				//				GasFeeCap:         big.NewInt(0),
+				//				GasTipCap:         big.NewInt(0),
+				//				SkipAccountChecks: false,
+				//>>>>>>> 657dcf6
 			}
 			txContext := vm.TxContext{
 				Origin:   origin,
@@ -408,6 +433,10 @@ func TestInternals(t *testing.T) {
 			if err != nil {
 				t.Fatalf("test %v: failed to create message: %v", tc.name, err)
 			}
+			msg.From = origin
+			msg.GasFeeCap = big.NewInt(0)
+			msg.GasTipCap = big.NewInt(0)
+			msg.SkipAccountChecks = false
 			tc.tracer.CaptureTxStart(evm, tx, msg.From)
 			vmRet, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
 			if err != nil {
