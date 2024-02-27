@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dfuse-io/eth-go"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core"
@@ -28,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	pbeth "github.com/ethereum/go-ethereum/pb/sf/ethereum/type/v2"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/streamingfast/eth-go"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
@@ -1588,7 +1588,7 @@ func (v _ctxView) String() string {
 	}
 	blk := "<no block>"
 	if v.f.block != nil {
-		blk = v.f.block.AsRef().String()
+		blk = fmt.Sprintf("#%d (%s)", v.f.block.Number, hex.EncodeToString(v.f.block.Hash))
 	}
 
 	trx := "<no trx>"
