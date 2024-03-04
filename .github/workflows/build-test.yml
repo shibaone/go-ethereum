@@ -6,6 +6,11 @@ on:
       - master
       - develop
 
+  pull_request:
+    branches:
+      - master
+      - develop
+
 jobs:
   unit-test:
     strategy:
@@ -36,5 +41,3 @@ jobs:
       run: |
         go mod download
         make geth
-
-

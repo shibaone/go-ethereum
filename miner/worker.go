@@ -725,7 +725,7 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 
 	stopPrefetchCh := make(chan struct{})
 	defer close(stopPrefetchCh)
-	//prefetch txs from all pending txs
+	// prefetch txs from all pending txs
 	txsPrefetch := txs.Copy()
 	tx := txsPrefetch.PeekWithUnwrap()
 	if tx != nil {
@@ -910,8 +910,10 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		return nil, err
 	}
 
-	// Handle upgrade build-in system contract code
-	systemcontracts.UpgradeBuildInSystemContract(w.chainConfig, header.Number, parent.Time, header.Time, env.state, firehose.NoOpContext)
+	if !w.chainConfig.IsFeynman(header.Number, header.Time) {
+		// Handle upgrade build-in system contract code
+		systemcontracts.UpgradeBuildInSystemContract(w.chainConfig, header.Number, parent.Time, header.Time, env.state, firehose.NoOpContext)
+	}
 
 	return env, nil
 }

@@ -6,6 +6,11 @@ on:
       - "firehose-v*"
       - "release/*"
 
+  pull_request:
+    branches:
+      - "firehose-v*"
+      - "release/*"
+
 jobs:
   unit-test:
     strategy:
@@ -40,4 +45,3 @@ jobs:
       run: |
         go mod download
         make test
-

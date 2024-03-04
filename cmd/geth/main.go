@@ -76,6 +76,7 @@ var (
 		utils.OverrideKepler,
 		utils.OverrideCancun,
 		utils.OverrideVerkle,
+		utils.OverrideFeynman,
 		utils.EnablePersonal,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
