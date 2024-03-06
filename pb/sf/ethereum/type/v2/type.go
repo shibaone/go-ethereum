@@ -8,6 +8,14 @@ import (
 
 var b0 = big.NewInt(0)
 
+func (b *Block) PreviousNum() uint64 {
+	if b.Header.Number == 0 {
+		return 0
+	}
+
+	return b.Header.Number - 1
+}
+
 func (b *Block) PreviousID() string {
 	return hex.EncodeToString(b.Header.ParentHash)
 }

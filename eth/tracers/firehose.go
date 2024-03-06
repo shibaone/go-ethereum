@@ -77,9 +77,11 @@ type Firehose struct {
 }
 
 func NewFirehoseLogger() *Firehose {
-	// FIXME: Where should we put our actual INIT line?
-	// FIXME: Pickup version from go-ethereum (PR comment)
-	printToFirehose("INIT", "2.3", "geth", "1.12.0")
+	// We cannot import confighelpers since it's defined in the "parent" repository.
+	// Quite unsure what we could do, might not be of importance actually (but would
+	// indeed be nice to have the version in the firehose logs, but it's not a blocker)
+	// arbitrumVcsVersion, _, _ := confighelpers.GetVersion()
+	printToFirehose("INIT", "3.0", "arbitrum", params.VersionWithMeta)
 
 	return &Firehose{
 		// Global state
@@ -1041,12 +1043,18 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 
 	f.outputBuffer.Reset()
 
-	libNum, libID := finalityStatus.ToFirehoseLogParams()
+	previousNum, previousHash := block.PreviousNum(), block.PreviousID()
+	libNum := finalityStatus.LastIrreversibleBlockNumber
 
 	// **Important* The final space in the Sprintf template is mandatory!
-	f.outputBuffer.WriteString(fmt.Sprintf("FIRE BLOCK %d %s %s %s ", block.Number, hex.EncodeToString(block.Hash), libNum, libID))
-	// from cherry-picked commit
-	//	f.outputBuffer.WriteString(fmt.Sprintf("FIRE BLOCK %d %s %d %s %d %d ", block.Number, hex.EncodeToString(block.Hash), previousNum, previousHash, libNum, block.Time().UnixNano()))
+	f.outputBuffer.WriteString(fmt.Sprintf("FIRE BLOCK %d %s %d %s %d %d ",
+		block.Number,
+		hex.EncodeToString(block.Hash),
+		previousNum,
+		previousHash,
+		libNum,
+		block.Time().UnixNano(),
+	))
 
 	encoder := base64.NewEncoder(base64.StdEncoding, f.outputBuffer)
 	if _, err = encoder.Write(marshalled); err != nil {
@@ -1712,16 +1720,6 @@ func (s *FinalityStatus) populateFromChain(num uint64, hash []byte) {
 
 	s.LastIrreversibleBlockNumber = num //finalHeader.Number.Uint64()
 	s.LastIrreversibleBlockHash = hash  //finalHeader.Hash().Bytes()
-}
-
-// ToFirehoseLogParams converts the data into the format expected by Firehose reader,
-// replacing the value with "." if the data is empty.
-func (s *FinalityStatus) ToFirehoseLogParams() (libNum, libID string) {
-	if s.IsEmpty() {
-		return ".", "."
-	}
-
-	return strconv.FormatUint(s.LastIrreversibleBlockNumber, 10), hex.EncodeToString(s.LastIrreversibleBlockHash)
 }
 
 func (s *FinalityStatus) Reset() {
