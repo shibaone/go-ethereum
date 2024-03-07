@@ -1044,7 +1044,7 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 	f.outputBuffer.Reset()
 
 	previousNum, previousHash := block.PreviousNum(), block.PreviousID()
-	libNum := finalityStatus.LastIrreversibleBlockNumber
+	libNum := finalityStatus.NormalizeLastIrreversibleBlockNum(block.Number)
 
 	// **Important* The final space in the Sprintf template is mandatory!
 	f.outputBuffer.WriteString(fmt.Sprintf("FIRE BLOCK %d %s %d %s %d %d ",
@@ -1068,6 +1068,32 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 	f.outputBuffer.WriteString("\n")
 
 	flushToFirehose(f.outputBuffer.Bytes(), os.Stdout)
+}
+
+// NormalizeLastIrreversibleBlockNum returns the normalized LIB number for the given head block number.
+//
+// We use different rules to ensure that a LIBNum is at least available in all situation, worst case
+// after 200 blocks has passed, LIBNum become headBlockNum - 200.
+func (s *FinalityStatus) NormalizeLastIrreversibleBlockNum(headBlockNum uint64) (libNum uint64) {
+	if s.IsEmpty() {
+		if headBlockNum <= 200 {
+			return 0
+		}
+
+		return headBlockNum - 200
+	}
+
+	// In normal circumstances, we would received something like Block #2500 (Finalized #2400) (e.g. finalized
+	// is before/< than block). When doing big reprocessing from an already synced beacon node, you might receive
+	// actually Block #2500 (Finalized #5400) (e.g. finalized is after/> than block).
+	//
+	// When reprocessing and finalized block is after block, we assume block itself is now the LIB num
+	if s.LastIrreversibleBlockNumber >= headBlockNum {
+		return headBlockNum
+	}
+
+	// Otherwise, finalized block is before block so it's the lib num
+	return s.LastIrreversibleBlockNumber
 }
 
 // printToFirehose is an easy way to print to Firehose format, it essentially
