@@ -921,7 +921,7 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 	EnableMVHashMap := w.chainConfig.IsCancun(env.header.Number)
 
 	// create and add empty mvHashMap in statedb
-	if EnableMVHashMap {
+	if EnableMVHashMap && w.IsRunning() {
 		deps = map[int]map[int]bool{}
 
 		chDeps = make(chan blockstm.TxDep)
@@ -956,8 +956,16 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 
 mainloop:
 	for {
+		// Check interruption signal and abort building if it's fired.
+		if interrupt != nil {
+			if signal := interrupt.Load(); signal != commitInterruptNone {
+				breakCause = "interrupt"
+				return signalToErr(signal)
+			}
+		}
+
 		if interruptCtx != nil {
-			if EnableMVHashMap {
+			if EnableMVHashMap && w.IsRunning() {
 				env.state.AddEmptyMVHashMap()
 			}
 
@@ -971,13 +979,6 @@ mainloop:
 			}
 		}
 
-		// Check interruption signal and abort building if it's fired.
-		if interrupt != nil {
-			if signal := interrupt.Load(); signal != commitInterruptNone {
-				breakCause = "interrupt"
-				return signalToErr(signal)
-			}
-		}
 		// If we don't have enough gas for any further transactions then we're done.
 		if env.gasPool.Gas() < params.TxGas {
 			breakCause = "Not enough gas for further transactions"
@@ -1056,7 +1057,7 @@ mainloop:
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 
-			if EnableMVHashMap {
+			if EnableMVHashMap && w.IsRunning() {
 				env.depsMVFullWriteList = append(env.depsMVFullWriteList, env.state.MVFullWriteList())
 				env.mvReadMapList = append(env.mvReadMapList, env.state.MVReadMap())
 
@@ -1086,7 +1087,7 @@ mainloop:
 			txs.Pop()
 		}
 
-		if EnableMVHashMap {
+		if EnableMVHashMap && w.IsRunning() {
 			env.state.ClearReadMap()
 			env.state.ClearWriteMap()
 		}
