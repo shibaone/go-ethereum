@@ -767,7 +767,7 @@ func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.I
 	}
 
 	if config.IsOnFeynmanFix(blockNumber, lastBlockTime, blockTime) {
-		applySystemContractUpgrade(feynmanFixUpgrade[network], blockNumber, statedb, logger)
+		applySystemContractUpgrade(feynmanFixUpgrade[network], blockNumber, statedb, logger, firehoseContext)
 	}
 
 	/*
