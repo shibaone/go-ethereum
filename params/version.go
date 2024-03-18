@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	VersionMajor = 1       // Major version component of the current release
-	VersionMinor = 3       // Minor version component of the current release
-	VersionPatch = 11      // Patch version component of the current release
-	VersionMeta  = "fh2.2" // Version metadata to append to the version string
+	VersionMajor = 1             // Major version component of the current release
+	VersionMinor = 4             // Minor version component of the current release
+	VersionPatch = 2             // Patch version component of the current release
+	VersionMeta  = "alpha-fh2.2" // Version metadata to append to the version string
 
 	FirehoseVersionMajor = 2
 	FirehoseVersionMinor = 2

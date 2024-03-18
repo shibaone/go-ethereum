@@ -15,6 +15,7 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/holiman/uint256"
 	"github.com/prysmaticlabs/prysm/v4/crypto/bls"
 	"github.com/willf/bitset"
 	"golang.org/x/crypto/sha3"
@@ -76,7 +77,7 @@ var (
 	diffInTurn = big.NewInt(2)            // Block difficulty for in-turn signatures
 	diffNoTurn = big.NewInt(1)            // Block difficulty for out-of-turn signatures
 	// 100 native token
-	maxSystemBalance                  = new(big.Int).Mul(big.NewInt(100), big.NewInt(params.Ether))
+	maxSystemBalance                  = new(uint256.Int).Mul(uint256.NewInt(100), uint256.NewInt(params.Ether))
 	verifyVoteAttestationErrorCounter = metrics.NewRegisteredCounter("parlia/verifyVoteAttestation/error", nil)
 	updateAttestationErrorCounter     = metrics.NewRegisteredCounter("parlia/updateAttestation/error", nil)
 	validVotesfromSelfCounter         = metrics.NewRegisteredCounter("parlia/VerifyVote/self", nil)
@@ -435,7 +436,7 @@ func (p *Parlia) verifyVoteAttestation(chain consensus.ChainHeaderReader, header
 		return nil
 	}
 	if attestation.Data == nil {
-		return fmt.Errorf("invalid attestation, vote data is nil")
+		return errors.New("invalid attestation, vote data is nil")
 	}
 	if len(attestation.Extra) > types.MaxAttestationExtraLength {
 		return fmt.Errorf("invalid attestation, too large extra length: %d", len(attestation.Extra))
@@ -464,7 +465,7 @@ func (p *Parlia) verifyVoteAttestation(chain consensus.ChainHeaderReader, header
 	}
 	justifiedBlockNumber, justifiedBlockHash, err := p.GetJustifiedNumberAndHash(chain, headers)
 	if err != nil {
-		return fmt.Errorf("unexpected error when getting the highest justified number and hash")
+		return errors.New("unexpected error when getting the highest justified number and hash")
 	}
 	if sourceNumber != justifiedBlockNumber || sourceHash != justifiedBlockHash {
 		return fmt.Errorf("invalid attestation, source mismatch, expected block: %d, hash: %s; real block: %d, hash: %s",
@@ -486,7 +487,7 @@ func (p *Parlia) verifyVoteAttestation(chain consensus.ChainHeaderReader, header
 	validators := snap.validators()
 	validatorsBitSet := bitset.From([]uint64{uint64(attestation.VoteAddressSet)})
 	if validatorsBitSet.Count() > uint(len(validators)) {
-		return fmt.Errorf("invalid attestation, vote number larger than validators number")
+		return errors.New("invalid attestation, vote number larger than validators number")
 	}
 	votedAddrs := make([]bls.PublicKey, 0, validatorsBitSet.Count())
 	for index, val := range validators {
@@ -503,7 +504,7 @@ func (p *Parlia) verifyVoteAttestation(chain consensus.ChainHeaderReader, header
 
 	// The valid voted validators should be no less than 2/3 validators.
 	if len(votedAddrs) < cmath.CeilDiv(len(snap.Validators)*2, 3) {
-		return fmt.Errorf("invalid attestation, not enough validators voted")
+		return errors.New("invalid attestation, not enough validators voted")
 	}
 
 	// Verify the aggregated signature.
@@ -512,7 +513,7 @@ func (p *Parlia) verifyVoteAttestation(chain consensus.ChainHeaderReader, header
 		return fmt.Errorf("BLS signature converts failed: %v", err)
 	}
 	if !aggSig.FastAggregateVerify(votedAddrs, attestation.Data.Hash()) {
-		return fmt.Errorf("invalid attestation, signature verify failed")
+		return errors.New("invalid attestation, signature verify failed")
 	}
 
 	return nil
@@ -587,15 +588,19 @@ func (p *Parlia) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 	if header.WithdrawalsHash != nil {
 		return fmt.Errorf("invalid withdrawalsHash: have %x, expected nil", header.WithdrawalsHash)
 	}
-	// Verify the existence / non-existence of excessBlobGas
+	// Verify the existence / non-existence of cancun-specific header fields
+	if header.ParentBeaconRoot != nil {
+		return fmt.Errorf("invalid parentBeaconRoot, have %#x, expected nil", header.ParentBeaconRoot)
+	}
 	cancun := chain.Config().IsCancun(header.Number, header.Time)
-	if !cancun && header.ExcessBlobGas != nil {
-		return fmt.Errorf("invalid excessBlobGas: have %d, expected nil", header.ExcessBlobGas)
-	}
-	if !cancun && header.BlobGasUsed != nil {
-		return fmt.Errorf("invalid blobGasUsed: have %d, expected nil", header.BlobGasUsed)
-	}
-	if cancun {
+	if !cancun {
+		switch {
+		case header.ExcessBlobGas != nil:
+			return fmt.Errorf("invalid excessBlobGas: have %d, expected nil", header.ExcessBlobGas)
+		case header.BlobGasUsed != nil:
+			return fmt.Errorf("invalid blobGasUsed: have %d, expected nil", header.BlobGasUsed)
+		}
+	} else {
 		if err := eip4844.VerifyEIP4844Header(parent, header); err != nil {
 			return err
 		}
@@ -888,7 +893,7 @@ func (p *Parlia) assembleVoteAttestation(chain consensus.ChainHeaderReader, head
 	// Prepare vote data
 	justifiedBlockNumber, justifiedBlockHash, err := p.GetJustifiedNumberAndHash(chain, []*types.Header{parent})
 	if err != nil {
-		return fmt.Errorf("unexpected error when getting the highest justified number and hash")
+		return errors.New("unexpected error when getting the highest justified number and hash")
 	}
 	attestation := &types.VoteAttestation{
 		Data: &types.VoteData{
@@ -925,7 +930,7 @@ func (p *Parlia) assembleVoteAttestation(chain consensus.ChainHeaderReader, head
 	validatorsBitSet := bitset.From([]uint64{uint64(attestation.VoteAddressSet)})
 	if validatorsBitSet.Count() < uint(len(signatures)) {
 		log.Warn(fmt.Sprintf("assembleVoteAttestation, check VoteAddress Set failed, expected:%d, real:%d", len(signatures), validatorsBitSet.Count()))
-		return fmt.Errorf("invalid attestation, check VoteAddress Set failed")
+		return errors.New("invalid attestation, check VoteAddress Set failed")
 	}
 
 	// Append attestation to header extra field.
@@ -942,6 +947,16 @@ func (p *Parlia) assembleVoteAttestation(chain consensus.ChainHeaderReader, head
 	header.Extra = append(header.Extra, extraSealBytes...)
 
 	return nil
+}
+
+// NextInTurnValidator return the next in-turn validator for header
+func (p *Parlia) NextInTurnValidator(chain consensus.ChainHeaderReader, header *types.Header) (common.Address, error) {
+	snap, err := p.snapshot(chain, header.Number.Uint64(), header.Hash(), nil)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	return snap.inturnValidator(), nil
 }
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
@@ -975,7 +990,7 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 
 	header.Extra = header.Extra[:extraVanity-nextForkHashSize]
-	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, number, header.Time)
+	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, chain.GenesisHeader().Time, number, header.Time)
 	header.Extra = append(header.Extra, nextForkHash[:]...)
 
 	if err := p.prepareValidators(header); err != nil {
@@ -1116,7 +1131,7 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 	if err != nil {
 		return err
 	}
-	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, number, header.Time)
+	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, chain.GenesisHeader().Time, number, header.Time)
 	if !snap.isMajorityFork(hex.EncodeToString(nextForkHash[:])) {
 		log.Debug("there is a possible fork, and your client is not the majority. Please check...", "nextForkHash", hex.EncodeToString(nextForkHash[:]))
 	}
@@ -1328,27 +1343,27 @@ func (p *Parlia) VerifyVote(chain consensus.ChainHeaderReader, vote *types.VoteE
 	header := chain.GetHeaderByHash(targetHash)
 	if header == nil {
 		log.Warn("BlockHeader at current voteBlockNumber is nil", "targetNumber", targetNumber, "targetHash", targetHash)
-		return fmt.Errorf("BlockHeader at current voteBlockNumber is nil")
+		return errors.New("BlockHeader at current voteBlockNumber is nil")
 	}
 	if header.Number.Uint64() != targetNumber {
 		log.Warn("unexpected target number", "expect", header.Number.Uint64(), "real", targetNumber)
-		return fmt.Errorf("target number mismatch")
+		return errors.New("target number mismatch")
 	}
 
 	justifiedBlockNumber, justifiedBlockHash, err := p.GetJustifiedNumberAndHash(chain, []*types.Header{header})
 	if err != nil {
 		log.Error("failed to get the highest justified number and hash", "headerNumber", header.Number, "headerHash", header.Hash())
-		return fmt.Errorf("unexpected error when getting the highest justified number and hash")
+		return errors.New("unexpected error when getting the highest justified number and hash")
 	}
 	if vote.Data.SourceNumber != justifiedBlockNumber || vote.Data.SourceHash != justifiedBlockHash {
-		return fmt.Errorf("vote source block mismatch")
+		return errors.New("vote source block mismatch")
 	}
 
 	number := header.Number.Uint64()
 	snap, err := p.snapshot(chain, number-1, header.ParentHash, nil)
 	if err != nil {
 		log.Error("failed to get the snapshot from consensus", "error", err)
-		return fmt.Errorf("failed to get the snapshot from consensus")
+		return errors.New("failed to get the snapshot from consensus")
 	}
 
 	validators := snap.Validators
@@ -1363,7 +1378,7 @@ func (p *Parlia) VerifyVote(chain consensus.ChainHeaderReader, vote *types.VoteE
 		}
 	}
 
-	return fmt.Errorf("vote verification failed")
+	return errors.New("vote verification failed")
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks
@@ -1612,7 +1627,7 @@ func (p *Parlia) getCurrentValidators(blockHash common.Hash, blockNum *big.Int) 
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
-	}, blockNr, nil, nil)
+	}, &blockNr, nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1635,19 +1650,19 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 	txs *[]*types.Transaction, receipts *[]*types.Receipt, receivedTxs *[]*types.Transaction, usedGas *uint64, mining bool, firehoseContext *firehose.Context) error {
 	coinbase := header.Coinbase
 	balance := state.GetBalance(consensus.SystemAddress)
-	if balance.Cmp(common.Big0) <= 0 {
+	if balance.Cmp(common.U2560) <= 0 {
 		return nil
 	}
-	state.SetBalance(consensus.SystemAddress, big.NewInt(0), firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
+	state.SetBalance(consensus.SystemAddress, common.U2560, firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
 	state.AddBalance(coinbase, balance, false, firehoseContext, firehose.BalanceChangeReason("reward_transfaction_fee"))
 
 	doDistributeSysReward := !p.chainConfig.IsKepler(header.Number, header.Time) &&
 		state.GetBalance(common.HexToAddress(systemcontracts.SystemRewardContract)).Cmp(maxSystemBalance) < 0
 	if doDistributeSysReward {
-		rewards := new(big.Int)
+		rewards := new(uint256.Int)
 		rewards = rewards.Rsh(balance, systemRewardPercent)
-		if rewards.Cmp(common.Big0) > 0 {
-			err := p.distributeToSystem(rewards, state, header, chain, txs, receipts, receivedTxs, usedGas, mining, firehoseContext)
+		if rewards.Cmp(common.U2560) > 0 {
+			err := p.distributeToSystem(rewards.ToBig(), state, header, chain, txs, receipts, receivedTxs, usedGas, mining, firehoseContext)
 			if err != nil {
 				return err
 			}
@@ -1656,7 +1671,7 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 		}
 	}
 	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", balance)
-	return p.distributeToValidator(balance, val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining, firehoseContext)
+	return p.distributeToValidator(balance.ToBig(), val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining, firehoseContext)
 }
 
 // slash spoiled validators
@@ -1852,7 +1867,7 @@ func (p *Parlia) applyTransaction(
 // within the branch including `headers` and utilizing the latest element as the head.
 func (p *Parlia) GetJustifiedNumberAndHash(chain consensus.ChainHeaderReader, headers []*types.Header) (uint64, common.Hash, error) {
 	if chain == nil || len(headers) == 0 || headers[len(headers)-1] == nil {
-		return 0, common.Hash{}, fmt.Errorf("illegal chain or header")
+		return 0, common.Hash{}, errors.New("illegal chain or header")
 	}
 	head := headers[len(headers)-1]
 	snap, err := p.snapshot(chain, head.Number.Uint64(), head.Hash(), headers)
@@ -2025,7 +2040,7 @@ func applyMessage(
 		*msg.To(),
 		msg.Data(),
 		msg.Gas(),
-		msg.Value(),
+		uint256.MustFromBig(msg.Value()),
 	)
 	if err != nil {
 		log.Error("apply message failed", "msg", string(ret), "err", err)
