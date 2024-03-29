@@ -89,8 +89,7 @@ type StateLogger interface {
 // must be created with new root and updated database for accessing post-
 // commit states.
 type StateDB struct {
-	// Arbitrum: track the total balance change across all accounts
-	unexpectedBalanceDelta *big.Int
+	arbExtraData *ArbitrumExtraData // must be a pointer - can't be a part of StateDB allocation, otherwise its finalizer might not get called
 
 	db         Database
 	prefetcher *triePrefetcher
@@ -186,7 +185,9 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		return nil, err
 	}
 	sdb := &StateDB{
-		unexpectedBalanceDelta: new(big.Int),
+		arbExtraData: &ArbitrumExtraData{
+			unexpectedBalanceDelta: new(big.Int),
+		},
 
 		db:                   db,
 		trie:                 tr,
@@ -435,7 +436,7 @@ func (s *StateDB) HasSelfDestructed(addr common.Address) bool {
 func (s *StateDB) AddBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
+		s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount)
 		stateObject.AddBalance(amount, reason)
 	}
 }
@@ -444,7 +445,7 @@ func (s *StateDB) AddBalance(addr common.Address, amount *big.Int, reason Balanc
 func (s *StateDB) SubBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, amount)
+		s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, amount)
 		stateObject.SubBalance(amount, reason)
 	}
 }
@@ -456,8 +457,8 @@ func (s *StateDB) SetBalance(addr common.Address, amount *big.Int, reason Balanc
 			amount = big.NewInt(0)
 		}
 		prevBalance := stateObject.Balance()
-		s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
-		s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, prevBalance)
+		s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount)
+		s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, prevBalance)
 		stateObject.SetBalance(amount, reason)
 	}
 }
@@ -466,7 +467,7 @@ func (s *StateDB) ExpectBalanceBurn(amount *big.Int) {
 	if amount.Sign() < 0 {
 		panic(fmt.Sprintf("ExpectBalanceBurn called with negative amount %v", amount))
 	}
-	s.unexpectedBalanceDelta.Add(s.unexpectedBalanceDelta, amount)
+	s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount)
 }
 
 func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
@@ -534,7 +535,7 @@ func (s *StateDB) SelfDestruct(addr common.Address) {
 		s.logger.OnBalanceChange(addr, prev, n, BalanceDecreaseSelfdestruct)
 	}
 	stateObject.markSelfdestructed()
-	s.unexpectedBalanceDelta.Sub(s.unexpectedBalanceDelta, stateObject.data.Balance)
+	s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, stateObject.data.Balance)
 
 	stateObject.data.Balance = n
 }
@@ -779,7 +780,9 @@ func (s *StateDB) CreateAccount(addr common.Address) {
 func (s *StateDB) Copy() *StateDB {
 	// Copy all the basic fields, initialize the memory ones
 	state := &StateDB{
-		unexpectedBalanceDelta: new(big.Int).Set(s.unexpectedBalanceDelta),
+		arbExtraData: &ArbitrumExtraData{
+			unexpectedBalanceDelta: new(big.Int).Set(s.arbExtraData.unexpectedBalanceDelta),
+		},
 
 		db:                   s.db,
 		trie:                 s.db.CopyTrie(s.trie),
@@ -884,7 +887,7 @@ func (s *StateDB) Copy() *StateDB {
 func (s *StateDB) Snapshot() int {
 	id := s.nextRevisionId
 	s.nextRevisionId++
-	s.validRevisions = append(s.validRevisions, revision{id, s.journal.length(), new(big.Int).Set(s.unexpectedBalanceDelta)})
+	s.validRevisions = append(s.validRevisions, revision{id, s.journal.length(), new(big.Int).Set(s.arbExtraData.unexpectedBalanceDelta)})
 	return id
 }
 
@@ -899,7 +902,7 @@ func (s *StateDB) RevertToSnapshot(revid int) {
 	}
 	revision := s.validRevisions[idx]
 	snapshot := revision.journalIndex
-	s.unexpectedBalanceDelta = new(big.Int).Set(revision.unexpectedBalanceDelta)
+	s.arbExtraData.unexpectedBalanceDelta = new(big.Int).Set(revision.unexpectedBalanceDelta)
 
 	// Replay the journal to undo changes and remove invalidated snapshots
 	s.journal.revert(s, snapshot)
@@ -1379,7 +1382,7 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		s.snap = nil
 	}
 
-	s.unexpectedBalanceDelta.Set(new(big.Int))
+	s.arbExtraData.unexpectedBalanceDelta.Set(new(big.Int))
 
 	if root == (common.Hash{}) {
 		root = types.EmptyRootHash
