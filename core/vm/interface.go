@@ -80,8 +80,6 @@ type StateDB interface {
 	AddLog(*types.Log, *firehose.Context)
 	AddPreimage(common.Hash, []byte)
 
-	ForEachStorage(common.Address, func(common.Hash, common.Hash) bool) error
-
 	Finalise(bool)
 }
 

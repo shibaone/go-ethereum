@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 func TestGenesisContractChange(t *testing.T) {
@@ -56,7 +57,8 @@ func TestGenesisContractChange(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	genesis := genspec.MustCommit(db)
+
+	genesis := genspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	statedb, err := state.New(genesis.Root(), state.NewDatabase(db), nil)
 	require.NoError(t, err)

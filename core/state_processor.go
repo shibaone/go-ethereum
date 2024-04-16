@@ -82,10 +82,14 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if txFirehoseContext.Enabled() {
 		txFirehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.TxSyncBuffer)
 	}
-
-	blockContext := NewEVMBlockContext(header, p.bc, nil)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg, txFirehoseContext)
-	signer := types.MakeSigner(p.config, header.Number, header.Time)
+	var (
+		context = NewEVMBlockContext(header, p.bc, nil)
+		vmenv   = vm.NewEVM(context, vm.TxContext{}, statedb, p.config, cfg, firehoseContext)
+		signer  = types.MakeSigner(p.config, header.Number, header.Time)
+	)
+	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
+		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb, firehoseContext)
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		if txFirehoseContext.Enabled() {
@@ -238,6 +242,11 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = result.UsedGas
 
+	if tx.Type() == types.BlobTxType {
+		receipt.BlobGasUsed = uint64(len(tx.BlobHashes()) * params.BlobTxBlobGasPerBlob)
+		receipt.BlobGasPrice = evm.Context.BlobBaseFee
+	}
+
 	// If the transaction created a contract, store the creation address in the receipt.
 	if msg.To == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
@@ -264,6 +273,30 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{BlobHashes: tx.BlobHashes()}, statedb, config, cfg, txFirehoseContext)
+	txContext := NewEVMTxContext(msg)
+	vmenv := vm.NewEVM(blockContext, txContext, statedb, config, cfg, txFirehoseContext)
 	return applyTransaction(msg, config, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv, interruptCtx, txFirehoseContext)
+}
+
+// ProcessBeaconBlockRoot applies the EIP-4788 system call to the beacon block root
+// contract. This method is exported to be used in tests.
+func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *state.StateDB, firehoseContext *firehose.Context) {
+	firehoseContext.StartSystemCall()
+	defer firehoseContext.EndSystemCall()
+
+	// If EIP-4788 is enabled, we need to invoke the beaconroot storage contract with
+	// the new root
+	msg := &Message{
+		From:      params.SystemAddress,
+		GasLimit:  30_000_000,
+		GasPrice:  common.Big0,
+		GasFeeCap: common.Big0,
+		GasTipCap: common.Big0,
+		To:        &params.BeaconRootsStorageAddress,
+		Data:      beaconRoot[:],
+	}
+	vmenv.Reset(NewEVMTxContext(msg), statedb, firehoseContext)
+	statedb.AddAddressToAccessList(params.BeaconRootsStorageAddress)
+	_, _, _ = vmenv.Call(vm.AccountRef(msg.From), *msg.To, msg.Data, 30_000_000, common.Big0, nil)
+	statedb.Finalise(true)
 }
