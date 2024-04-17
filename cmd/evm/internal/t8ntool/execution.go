@@ -170,7 +170,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	// Calculate the BlobBaseFee
 	var excessBlobGas uint64
 	if pre.Env.ExcessBlobGas != nil {
-		excessBlobGas := *pre.Env.ExcessBlobGas
+		excessBlobGas = *pre.Env.ExcessBlobGas
 		vmContext.BlobBaseFee = eip4844.CalcBlobFee(excessBlobGas)
 	} else {
 		// If it is not explicitly defined, but we have the parent values, we try
@@ -191,7 +191,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	}
 	if beaconRoot := pre.Env.ParentBeaconBlockRoot; beaconRoot != nil {
 		evm := vm.NewEVM(vmContext, vm.TxContext{}, statedb, chainConfig, vmConfig, firehose.NoOpContext)
-		core.ProcessBeaconBlockRoot(*beaconRoot, evm, statedb)
+		core.ProcessBeaconBlockRoot(*beaconRoot, evm, statedb, firehose.NoOpContext)
 	}
 
 	for i := 0; txIt.Next(); i++ {

@@ -217,8 +217,6 @@ func (e *GenesisMismatchError) Error() string {
 // ChainOverrides contains the changes to chain config
 // Typically, these modifications involve hardforks that are not enabled on the BSC mainnet, intended for testing purposes.
 type ChainOverrides struct {
-	OverrideShanghai   *uint64
-	OverrideKepler     *uint64
 	OverrideCancun     *uint64
 	OverrideVerkle     *uint64
 	OverrideFeynman    *uint64
@@ -248,12 +246,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	}
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
-			if overrides != nil && overrides.OverrideShanghai != nil {
-				config.ShanghaiTime = overrides.OverrideShanghai
-			}
-			if overrides != nil && overrides.OverrideKepler != nil {
-				config.KeplerTime = overrides.OverrideKepler
-			}
 			if overrides != nil && overrides.OverrideCancun != nil {
 				config.CancunTime = overrides.OverrideCancun
 			}
@@ -290,7 +282,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// is initialized with an external ancient store. Commit genesis state
 	// in this case.
 	header := rawdb.ReadHeader(db, stored, 0)
-	if header.Root != types.EmptyRootHash && !triedb.Initialized(header.Root) {
+	if header.Root != types.EmptyRootHash && !triedb.Initialized(header.Root) && !triedb.Config().NoTries {
 		if genesis == nil {
 			genesis = DefaultBSCGenesisBlock()
 		}
@@ -454,6 +446,10 @@ func (g *Genesis) ToBlock() *types.Block {
 			withdrawals = make([]*types.Withdrawal, 0)
 		}
 		if conf.IsCancun(num, g.Timestamp) {
+			if conf.Parlia != nil {
+				head.WithdrawalsHash = &types.EmptyWithdrawalsHash
+			}
+
 			// EIP-4788: The parentBeaconBlockRoot of the genesis block is always
 			// the zero hash. This is because the genesis block does not have a parent
 			// by definition.

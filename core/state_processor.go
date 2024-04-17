@@ -96,8 +96,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		txNum   = len(block.Transactions())
 	)
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
-		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb)
+		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb, firehoseContext)
 	}
+
 	// Iterate over and process the individual transactions
 	posa, isPoSA := p.engine.(consensus.PoSA)
 	commonTxs := make([]*types.Transaction, 0, txNum)
@@ -118,6 +119,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// usually do have two tx, one for validator set contract, another for system reward contract.
 	systemTxs := make([]*types.Transaction, 0, 2)
 
+	txFirehoseContext := firehoseContext
+	if txFirehoseContext.Enabled() {
+		txFirehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.TxSyncBuffer)
+	}
+
 	for i, tx := range block.Transactions() {
 		if isPoSA {
 			if isSystemTx, err := posa.IsSystemTransaction(tx, block.Header()); err != nil {
@@ -129,6 +135,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 				continue
 			}
 		}
+		if p.config.IsCancun(block.Number(), block.Time()) {
+			if len(systemTxs) > 0 {
+				// systemTxs should be always at the end of block.
+				return statedb, nil, nil, 0, fmt.Errorf("normal tx %d [%v] after systemTx", i, tx.Hash().Hex())
+			}
+		}
 
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
@@ -137,22 +149,25 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			return statedb, nil, nil, 0, err
 		}
 
-		if firehoseContext.Enabled() {
-			firehoseContext.StartTransaction(tx, block.Header().BaseFee)
-			firehoseContext.RecordTrxFrom(msg.From)
+		if txFirehoseContext.Enabled() {
+			txFirehoseContext.StartTransaction(tx, uint(i), block.Header().BaseFee)
+			txFirehoseContext.RecordTrxFrom(msg.From)
 		}
 
 		statedb.SetTxContext(tx.Hash(), i)
 
-		receipt, err := applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, bloomProcessors)
+		receipt, err := applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, txFirehoseContext, bloomProcessors)
 		if err != nil {
 			// Trapped later at 'Process' call site at which point the block is canceled
 			bloomProcessors.Close()
 			return statedb, nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 
-		if firehoseContext.Enabled() {
-			firehoseContext.EndTransaction(receipt)
+		if txFirehoseContext.Enabled() {
+			txFirehoseContext.EndTransaction(receipt)
+
+			// We must flush using the "global" context here, since the speculative context don't hold the real global lock
+			firehoseContext.FlushTransaction(txFirehoseContext)
 		}
 
 		commonTxs = append(commonTxs, tx)
@@ -190,10 +205,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	return statedb, receipts, allLogs, *usedGas, nil
 }
 
-func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, txFirehoseContext *firehose.Context, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
-	evm.Reset(txContext, statedb)
+	evm.Reset(txContext, statedb, txFirehoseContext)
 
 	// Apply the transaction to the current state (included in the env).
 	result, err := ApplyMessage(evm, msg, gp)
@@ -246,7 +261,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, firehoseContext *firehose.Context, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, txFirehoseContext *firehose.Context, receiptProcessors ...ReceiptProcessor) (*types.Receipt, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(config, header.Number, header.Time), header.BaseFee)
 	if err != nil {
 		return nil, err
@@ -254,18 +269,21 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
 	txContext := NewEVMTxContext(msg)
-	vmenv := vm.NewEVM(blockContext, txContext, statedb, config, cfg, firehoseContext)
+	vmenv := vm.NewEVM(blockContext, txContext, statedb, config, cfg, txFirehoseContext)
 	defer func() {
 		ite := vmenv.Interpreter()
 		vm.EVMInterpreterPool.Put(ite)
 		vm.EvmPool.Put(vmenv)
 	}()
-	return applyTransaction(msg, config, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv, receiptProcessors...)
+	return applyTransaction(msg, config, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv, txFirehoseContext, receiptProcessors...)
 }
 
 // ProcessBeaconBlockRoot applies the EIP-4788 system call to the beacon block root
 // contract. This method is exported to be used in tests.
-func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *state.StateDB) {
+func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *state.StateDB, firehoseContext *firehose.Context) {
+	firehoseContext.StartSystemCall()
+	defer firehoseContext.EndSystemCall()
+
 	// If EIP-4788 is enabled, we need to invoke the beaconroot storage contract with
 	// the new root
 	msg := &Message{
@@ -274,11 +292,11 @@ func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *stat
 		GasPrice:  common.Big0,
 		GasFeeCap: common.Big0,
 		GasTipCap: common.Big0,
-		To:        &params.BeaconRootsStorageAddress,
+		To:        &params.BeaconRootsAddress,
 		Data:      beaconRoot[:],
 	}
-	vmenv.Reset(NewEVMTxContext(msg), statedb)
-	statedb.AddAddressToAccessList(params.BeaconRootsStorageAddress)
+	vmenv.Reset(NewEVMTxContext(msg), statedb, firehoseContext)
+	statedb.AddAddressToAccessList(params.BeaconRootsAddress)
 	_, _, _ = vmenv.Call(vm.AccountRef(msg.From), *msg.To, msg.Data, 30_000_000, common.U2560)
 	statedb.Finalise(true)
 }

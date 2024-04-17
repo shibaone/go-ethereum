@@ -1,6 +1,64 @@
 # Changelog
+## v1.4.5
+### FEATURE
+* [\#2378](https://github.com/bnb-chain/bsc/pull/2378) config: setup Testnet Tycho(Cancun) hardfork date
+
+### IMPROVEMENT
+* [\#2333](https://github.com/bnb-chain/bsc/pull/2333) remove code that will not be executed
+* [\#2369](https://github.com/bnb-chain/bsc/pull/2369) core: stateDb has no trie and no snap return err
+
+### BUGFIX
+* [\#2359](https://github.com/bnb-chain/bsc/pull/2359) triedb: do not open state freezer under notries
+
+## v1.4.4
+### FEATURE
+* [\#2279](https://github.com/bnb-chain/bsc/pull/2279) BlobTx: implement EIP-4844 on BSC
+* [\#2337](https://github.com/bnb-chain/bsc/pull/2337) 4844: bugfix and improve
+* [\#2339](https://github.com/bnb-chain/bsc/pull/2339) fix: missing block asigment WithSidecars
+* [\#2350](https://github.com/bnb-chain/bsc/pull/2350) cancun: change empty withdrawHash value of header
+* [\#2335](https://github.com/bnb-chain/bsc/pull/2335) upgrade: update system contracts bytes code and hardfork time of Feynman upgrade
+* [\#2323](https://github.com/bnb-chain/bsc/pull/2323) feat: export GasCeil in mev_params
+* [\#2357](https://github.com/bnb-chain/bsc/pull/2357) feat: add bid fee ceil in mev_params
+
+### IMPROVEMENT
+* [\#2321](https://github.com/bnb-chain/bsc/pull/2321) test: use full syncmode to run rpc node
+* [\#2338](https://github.com/bnb-chain/bsc/pull/2338) cmd: include more node info in metrics
+* [\#2342](https://github.com/bnb-chain/bsc/pull/2342) p2p: add metrics for inbound/outbound peers
+* [\#2334](https://github.com/bnb-chain/bsc/pull/2334) core: improve chain rewinding mechanism
+* [\#2352](https://github.com/bnb-chain/bsc/pull/2352) core: fix block report when chain is not setHead
+
+### BUGFIX
+NA
+
+## v1.4.3
+### FEATURE
+* [\#2241](https://github.com/bnb-chain/bsc/pull/2241) cmd/utils, core/rawdb, triedb/pathdb: flip hash to path scheme
+* [\#2312](https://github.com/bnb-chain/bsc/pull/2312) cmd/utils, node: switch to Pebble as the default db if none exists
+
+### IMPROVEMENT
+* [\#2228](https://github.com/bnb-chain/bsc/pull/2228) core: rephrase TriesInMemory log
+* [\#2234](https://github.com/bnb-chain/bsc/pull/2234) cmd/utils: disable snap protocol for fast node
+* [\#2236](https://github.com/bnb-chain/bsc/pull/2236) build(deps): bump github.com/quic-go/quic-go from 0.39.3 to 0.39.4
+* [\#2240](https://github.com/bnb-chain/bsc/pull/2240) core/state: fix taskResult typo
+
+* [\#2280](https://github.com/bnb-chain/bsc/pull/2280) cmd/utils, core: only full sync for fast nodes
+* [\#2298](https://github.com/bnb-chain/bsc/pull/2298) cmd, node: initialize ports with --instance
+* [\#2302](https://github.com/bnb-chain/bsc/pull/2302) cmd/geth, core/rawdb: add dbDeleteTrieState
+* [\#2304](https://github.com/bnb-chain/bsc/pull/2304) eth/ethconfig: remove overridekepler and overrideshanghai
+* [\#2307](https://github.com/bnb-chain/bsc/pull/2307) internal/ethapi: add net_nodeInfo
+* [\#2311](https://github.com/bnb-chain/bsc/pull/2311) Port cancun related changes from unreleased v1.14.0
+* [\#2313](https://github.com/bnb-chain/bsc/pull/2313) tests/truffle: use hbss to run test
+* [\#2314](https://github.com/bnb-chain/bsc/pull/2314) cmd/jsutil: dump MinGasPrice for validator
+* [\#2317](https://github.com/bnb-chain/bsc/pull/2317) feat: add mev metrics
+
+### BUGFIX
+* [\#2272](https://github.com/bnb-chain/bsc/pull/2272) parlia: add state prepare for internal SC transaction
+* [\#2277](https://github.com/bnb-chain/bsc/pull/2277) fix: systemTx should be always at the end of block
+* [\#2299](https://github.com/bnb-chain/bsc/pull/2299) fix: add FeynmanFix upgrade for a testnet issue
+* [\#2310](https://github.com/bnb-chain/bsc/pull/2310) core/vm: fix PrecompiledContractsCancun
+
 ## v1.4.2
-### Feature
+### FEATURE
 * [\#2021](https://github.com/bnb-chain/bsc/pull/2021) feat: support separate trie database
 * [\#2224](https://github.com/bnb-chain/bsc/pull/2224) feat: support MEV
 
@@ -119,6 +177,10 @@ NA
 [accounts: properly close managed wallets when closing manager (#28710)](https://github.com/bnb-chain/bsc/commit/d3452a22cc871306c62de52d19295914141863c0)
 [event: fix Resubscribe deadlock when unsubscribing after inner sub ends (#28359)](https://github.com/bnb-chain/bsc/commit/ffc6a0f36edda396a8421cf7a3c0feb88be20d0b)
 [all: replace log15 with slog (#28187)](https://github.com/bnb-chain/bsc/commit/28e73717016cdc9ebdb5fdb3474cfbd3bd2d2524)
+
+## v1.3.11
+BUGFIX
+* [\#2288](https://github.com/bnb-chain/bsc/pull/2288) fix: add FeynmanFix upgrade for a testnet issue
 
 ## v1.3.10
 FEATURE

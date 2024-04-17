@@ -1,6 +1,7 @@
 package firehose
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -20,7 +22,7 @@ import (
 // NoOpContext can be used when no recording should happen for a given code path
 var NoOpContext *Context
 
-var syncContext *Context = NewContext(&DelegateToWriterPrinter{writer: os.Stdout})
+var syncContext *Context = NewContext(&DelegateToWriterPrinter{writer: os.Stdout}, false)
 
 // MaybeSyncContext is used when syncing blocks with the network for mindreader consumption, there
 // is always a single active sync context use for the whole syncing process, should not be used
@@ -47,11 +49,11 @@ func SyncContext() *Context {
 	return syncContext
 }
 
-func NewContext(printer Printer) *Context {
+func NewContext(printer Printer, speculative bool) *Context {
 	ctx := &Context{
 		printer: printer,
 
-		seenBlock:            atomic.NewBool(false),
+		isSpeculativeContext: speculative,
 		inBlock:              atomic.NewBool(false),
 		inTransaction:        atomic.NewBool(false),
 		totalOrderingCounter: atomic.NewUint64(0),
@@ -71,14 +73,15 @@ type Context struct {
 	printer Printer
 
 	// Global state
-	seenBlock *atomic.Bool
+	isSpeculativeContext bool
+	flushTxLock          sync.Mutex
 
-	// Block state
+	// Block state (don't forget to update resetBlock!)
 	inBlock              *atomic.Bool
 	blockLogIndex        uint64
 	totalOrderingCounter *atomic.Uint64
 
-	// Transaction state
+	// Transaction state (don't forget to update resetTransaction!)
 	inTransaction   *atomic.Bool
 	activeCallIndex string
 	nextCallIndex   uint64
@@ -106,10 +109,13 @@ func (ctx *Context) InitVersion(nodeVersion, dmVersion, variant string) {
 	ctx.printer.Print("INIT", dmVersion, variant, nodeVersion)
 }
 
-func NewSpeculativeExecutionContext() *Context {
-	return NewContext(NewToBufferPrinter())
+func NewSpeculativeExecutionContext(initialAllocationInBytes int) *Context {
+	return NewContext(NewToBufferPrinter(initialAllocationInBytes), true)
 }
 
+func NewSpeculativeExecutionContextWithBuffer(buffer *bytes.Buffer) *Context {
+	return NewContext(NewToBufferPrinterWithBuffer(buffer), true)
+}
 func (ctx *Context) Enabled() bool {
 	return ctx != nil
 }
@@ -141,7 +147,7 @@ func (ctx *Context) RecordGenesisBlock(block *types.Block, recordGenesisAlloc fu
 	root := block.Root()
 
 	ctx.StartBlock(block)
-	ctx.StartTransactionRaw(common.Hash{}, &zero, &big.Int{}, nil, nil, nil, 0, &big.Int{}, 0, nil, nil, nil, nil, 0)
+	ctx.StartTransactionRaw(common.Hash{}, &zero, &big.Int{}, nil, nil, nil, 0, &big.Int{}, 0, nil, nil, nil, nil, 0, 0, 0, nil, nil)
 	ctx.RecordTrxFrom(zero)
 	recordGenesisAlloc(ctx)
 	ctx.EndTransaction(&types.Receipt{PostState: root[:]})
@@ -153,8 +159,6 @@ func (ctx *Context) StartBlock(block *types.Block) {
 	if !ctx.inBlock.CompareAndSwap(false, true) {
 		panic("entering a block while already in a block scope")
 	}
-
-	ctx.seenBlock.Store(true)
 
 	ctx.printer.Print("BEGIN_BLOCK", Uint64(block.NumberU64()))
 }
@@ -220,9 +224,42 @@ func (ctx *Context) CancelBlock(block *types.Block, err error) {
 	)
 }
 
+func (ctx *Context) StartSystemCall() {
+	if ctx == nil {
+		return
+	}
+
+	if !ctx.inBlock.Load() {
+		panic("starting system call while not already within a block scope")
+	}
+
+	if !ctx.inTransaction.CompareAndSwap(false, true) {
+		panic("entering a system call while already in a transaction scope")
+	}
+
+	ctx.printer.Print("SYSTEM_CALL_START")
+}
+
+func (ctx *Context) EndSystemCall() {
+	if ctx == nil {
+		return
+	}
+
+	if !ctx.inBlock.Load() {
+		panic("ending system call while not already within a block scope")
+	}
+
+	if !ctx.inTransaction.CompareAndSwap(true, false) {
+		panic("ending a system call while not in a transaction scope")
+	}
+
+	ctx.resetTransaction()
+	ctx.printer.Print("SYSTEM_CALL_END")
+}
+
 // Transaction methods
 
-func (ctx *Context) StartTransaction(tx *types.Transaction, baseFee *big.Int) {
+func (ctx *Context) StartTransaction(tx *types.Transaction, txIndex uint, baseFee *big.Int) {
 	if ctx == nil {
 		return
 	}
@@ -245,6 +282,10 @@ func (ctx *Context) StartTransaction(tx *types.Transaction, baseFee *big.Int) {
 		maxFeePerGas(tx),
 		maxPriorityFeePerGas(tx),
 		tx.Type(),
+		txIndex,
+		tx.BlobGas(),
+		tx.BlobGasFeeCap(),
+		tx.BlobHashes(),
 	)
 }
 
@@ -253,7 +294,7 @@ func maxFeePerGas(tx *types.Transaction) *big.Int {
 	case types.LegacyTxType, types.AccessListTxType:
 		return nil
 
-	case types.DynamicFeeTxType:
+	case types.DynamicFeeTxType, types.BlobTxType:
 		return tx.GasFeeCap()
 	}
 
@@ -265,7 +306,7 @@ func maxPriorityFeePerGas(tx *types.Transaction) *big.Int {
 	case types.LegacyTxType, types.AccessListTxType:
 		return nil
 
-	case types.DynamicFeeTxType:
+	case types.DynamicFeeTxType, types.BlobTxType:
 		return tx.GasTipCap()
 	}
 
@@ -277,7 +318,7 @@ func gasPrice(tx *types.Transaction, baseFee *big.Int) *big.Int {
 	case types.LegacyTxType, types.AccessListTxType:
 		return tx.GasPrice()
 
-	case types.DynamicFeeTxType:
+	case types.DynamicFeeTxType, types.BlobTxType:
 		if baseFee == nil {
 			return tx.GasPrice()
 		}
@@ -305,12 +346,16 @@ func (ctx *Context) StartTransactionRaw(
 	maxFeePerGas *big.Int,
 	maxPriorityFeePerGas *big.Int,
 	txType uint8,
+	txIndex uint,
+	blobGas uint64,
+	blobGasFeeCap *big.Int,
+	blobHashes []common.Hash,
 ) {
 	if ctx == nil {
 		return
 	}
 
-	if !ctx.inTransaction.CAS(false, true) {
+	if !ctx.inTransaction.CompareAndSwap(false, true) {
 		panic("entering a transaction while already in a transaction scope")
 	}
 
@@ -320,10 +365,30 @@ func (ctx *Context) StartTransactionRaw(
 		toAsString = Addr(*to)
 	}
 
-	// London fork not active in this branch yet, add proper handling here when it's the case (and remove this comment)
 	maxFeePerGasAsString := "."
-	// London fork not active in this branch yet, add proper handling here when it's the case (and remove this comment)
+	if maxFeePerGas != nil {
+		maxFeePerGasAsString = Hex(maxFeePerGas.Bytes())
+	}
+
 	maxPriorityFeePerGasAsString := "."
+	if maxPriorityFeePerGas != nil {
+		maxPriorityFeePerGasAsString = Hex(maxPriorityFeePerGas.Bytes())
+	}
+
+	blobGasFeeCapAsString := "."
+	if blobGasFeeCap != nil {
+		blobGasFeeCapAsString = Hex(blobGasFeeCap.Bytes())
+	}
+
+	blobHashesAsString := "."
+	if len(blobHashes) > 0 {
+		stringHashses := make([]string, len(blobHashes))
+		for i, blobHash := range blobHashes {
+			stringHashses[i] = Hash(blobHash)
+		}
+
+		blobHashesAsString = strings.Join(stringHashses, ",")
+	}
 
 	ctx.printer.Print("BEGIN_APPLY_TRX",
 		Hash(hash),
@@ -341,6 +406,10 @@ func (ctx *Context) StartTransactionRaw(
 		maxPriorityFeePerGasAsString,
 		Uint8(txType),
 		Uint64(ctx.totalOrderingCounter.Inc()),
+		Uint(txIndex),
+		Uint64(blobGas),
+		blobGasFeeCapAsString,
+		blobHashesAsString,
 	)
 }
 
@@ -357,6 +426,40 @@ func (ctx *Context) RecordTrxFrom(from common.Address) {
 	ctx.printer.Print("TRX_FROM",
 		Addr(from),
 	)
+}
+
+// FlushTransaction flushes the transaction context to the printer of the global context
+// so that the transaction it emitted through the global context printer.
+//
+// It also reset automatically the txContext for future re-use, if desired.
+func (ctx *Context) FlushTransaction(txContext *Context) {
+	if ctx == nil || txContext == nil {
+		return
+	}
+
+	if v, ok := txContext.printer.(*ToBufferPrinter); ok {
+		ctx.flushTxLock.Lock()
+		defer ctx.flushTxLock.Unlock()
+
+		ctx.printer.Write(v.buffer.Bytes())
+		v.Reset()
+	}
+
+	// Reset the transaction context for future re-use, if desired
+	txContext.Reset()
+}
+
+// Reset resets the block/transaction context for future re-use, if desired. If does not
+// touch the global context for now.
+//
+// Should be used only on a transaction context, not on the global context.
+func (ctx *Context) Reset() {
+	if ctx == nil {
+		return
+	}
+
+	ctx.resetBlock()
+	ctx.resetTransaction()
 }
 
 func (ctx *Context) EndTransaction(receipt *types.Receipt) {
@@ -384,6 +487,8 @@ func (ctx *Context) EndTransaction(receipt *types.Receipt) {
 		Uint64(receipt.CumulativeGasUsed),
 		Hex(receipt.Bloom[:]),
 		Uint64(ctx.totalOrderingCounter.Inc()),
+		Uint64(receipt.BlobGasUsed),
+		BigInt(receipt.BlobGasPrice),
 		JSON(logItems),
 	)
 
@@ -415,9 +520,9 @@ func (ctx *Context) openCall() string {
 }
 
 func (ctx *Context) callIndex() string {
-	if ctx.seenBlock.Load() && !ctx.inBlock.Load() {
+	if !ctx.isSpeculativeContext && !ctx.inBlock.Load() {
 		debug.PrintStack()
-		panic("should have been call in a block, something is deeply wrong")
+		panic("should have been call in a block or in speculative context, something is deeply wrong")
 	}
 
 	return ctx.activeCallIndex

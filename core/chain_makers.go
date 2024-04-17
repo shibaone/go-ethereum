@@ -53,6 +53,9 @@ type BlockGen struct {
 	withdrawals []*types.Withdrawal
 
 	engine consensus.Engine
+
+	// extra data of block
+	sidecars types.BlobSidecars
 }
 
 // SetCoinbase sets the coinbase of the generated block.
@@ -103,7 +106,7 @@ func (b *BlockGen) SetParentBeaconRoot(root common.Hash) {
 		blockContext = NewEVMBlockContext(b.header, b.cm, &b.header.Coinbase)
 		vmenv        = vm.NewEVM(blockContext, vm.TxContext{}, b.statedb, b.cm.config, vm.Config{}, firehose.NoOpContext)
 	)
-	ProcessBeaconBlockRoot(root, vmenv, b.statedb)
+	ProcessBeaconBlockRoot(root, vmenv, b.statedb, firehose.NoOpContext)
 }
 
 // addTx adds a transaction to the generated block. If no coinbase has
@@ -172,6 +175,11 @@ func (b *BlockGen) AddUncheckedTx(tx *types.Transaction) {
 	b.txs = append(b.txs, tx)
 }
 
+// AddBlobSidecar add block's blob sidecar for DA checking.
+func (b *BlockGen) AddBlobSidecar(sidecar *types.BlobSidecar) {
+	b.sidecars = append(b.sidecars, sidecar)
+}
+
 // Number returns the block number of the block being generated.
 func (b *BlockGen) Number() *big.Int {
 	return new(big.Int).Set(b.header.Number)
@@ -185,6 +193,15 @@ func (b *BlockGen) Timestamp() uint64 {
 // BaseFee returns the EIP-1559 base fee of the block being generated.
 func (b *BlockGen) BaseFee() *big.Int {
 	return new(big.Int).Set(b.header.BaseFee)
+}
+
+// ExcessBlobGas returns the EIP-4844 ExcessBlobGas of the block.
+func (b *BlockGen) ExcessBlobGas() uint64 {
+	excessBlobGas := b.header.ExcessBlobGas
+	if excessBlobGas == nil {
+		return 0
+	}
+	return *excessBlobGas
 }
 
 // Gas returns the amount of gas left in the current block.
@@ -356,6 +373,16 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			if err != nil {
 				panic(err)
 			}
+			if block.Header().EmptyWithdrawalsHash() {
+				block = block.WithWithdrawals(make([]*types.Withdrawal, 0))
+			}
+			if config.IsCancun(block.Number(), block.Time()) {
+				for _, s := range b.sidecars {
+					s.BlockNumber = block.Number()
+					s.BlockHash = block.Hash()
+				}
+				block = block.WithSidecars(b.sidecars)
+			}
 
 			// Write state changes to db
 			root, _, err := statedb.Commit(b.header.Number.Uint64(), nil)
@@ -457,6 +484,9 @@ func (cm *chainMaker) makeHeader(parent *types.Block, state *state.StateDB, engi
 		excessBlobGas := eip4844.CalcExcessBlobGas(parentExcessBlobGas, parentBlobGasUsed)
 		header.ExcessBlobGas = &excessBlobGas
 		header.BlobGasUsed = new(uint64)
+		if cm.config.Parlia != nil {
+			header.WithdrawalsHash = &types.EmptyWithdrawalsHash
+		}
 		if cm.config.Parlia == nil {
 			header.ParentBeaconRoot = new(common.Hash)
 		}
@@ -589,5 +619,9 @@ func (cm *chainMaker) GetTd(hash common.Hash, number uint64) *big.Int {
 }
 
 func (cm *chainMaker) GetHighestVerifiedHeader() *types.Header {
+	panic("not supported")
+}
+
+func (cm *chainMaker) ChasingHead() *types.Header {
 	panic("not supported")
 }

@@ -475,6 +475,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// consensus engine is parlia
 	if st.evm.ChainConfig().Parlia != nil {
 		st.state.AddBalance(consensus.SystemAddress, fee, false, st.firehoseContext, firehose.BalanceChangeReason("reward_transaction_fee"))
+		// add extra blob fee reward
+		if rules.IsCancun {
+			blobFee := new(big.Int).SetUint64(st.blobGasUsed())
+			blobFee.Mul(blobFee, st.evm.Context.BlobBaseFee)
+			blobFeeU256, _ := uint256.FromBig(blobFee)
+			st.state.AddBalance(consensus.SystemAddress, blobFeeU256, false, st.firehoseContext, firehose.BalanceChangeReason("reward_blob_fee"))
+		}
 	} else {
 		st.state.AddBalance(st.evm.Context.Coinbase, fee, false, st.firehoseContext, firehose.BalanceChangeReason("reward_transaction_fee"))
 	}
