@@ -17,7 +17,6 @@
 package debug
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -33,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
@@ -339,55 +337,17 @@ func Setup(ctx *cli.Context, firehoseGenesis *core.Genesis, firehoseGethVersion 
 		log.Info("Logging configured", context...)
 	}
 
-	// Firehose
-	log.Info("Initializing firehose")
-	firehose.Enabled = ctx.Bool(firehoseEnabledFlag.Name)
-	firehose.SyncInstrumentationEnabled = ctx.Bool(firehoseSyncInstrumentationFlag.Name)
-	firehose.MiningEnabled = ctx.Bool(firehoseMiningEnabledFlag.Name)
-	firehose.BlockProgressEnabled = ctx.Bool(firehoseBlockProgressFlag.Name)
-
-	genesisProvenance := "unset"
-
-	if firehoseGenesis != nil {
-		firehose.GenesisConfig = firehoseGenesis
-		genesisProvenance = "Geth Specific Flag"
-	} else {
-		if genesisFilePath := ctx.String(firehoseGenesisFileFlag.Name); genesisFilePath != "" {
-			file, err := os.Open(genesisFilePath)
-			if err != nil {
-				return fmt.Errorf("firehose open genesis file: %w", err)
-			}
-			defer file.Close()
-
-			genesis := &core.Genesis{}
-			if err := json.NewDecoder(file).Decode(genesis); err != nil {
-				return fmt.Errorf("decode genesis file %q: %w", genesisFilePath, err)
-			}
-
-			firehose.GenesisConfig = genesis
-			genesisProvenance = "Flag " + firehoseGenesisFileFlag.Name
-		} else {
-			firehose.GenesisConfig = core.DefaultGenesisBlock()
-			genesisProvenance = "Geth Default"
-		}
-	}
-
-	log.Info("Firehose initialized",
-		"enabled", firehose.Enabled,
-		"sync_instrumentation_enabled", firehose.SyncInstrumentationEnabled,
-		"mining_enabled", firehose.MiningEnabled,
-		"block_progress_enabled", firehose.BlockProgressEnabled,
-		"genesis_provenance", genesisProvenance,
-		"firehose_version", params.FirehoseVersion(),
-		"geth_version", params.VersionWithMeta,
-		"chain_variant", params.Variant,
-	)
-
-	firehose.MaybeSyncContext().InitVersion(
+	if err := firehose.Init(ctx.Bool(firehoseEnabledFlag.Name),
+		ctx.Bool(firehoseSyncInstrumentationFlag.Name),
+		ctx.Bool(firehoseMiningEnabledFlag.Name),
+		ctx.Bool(firehoseBlockProgressFlag.Name),
+		firehoseGenesis,
+		ctx.String(firehoseGenesisFileFlag.Name),
+		func() interface{} { return new(core.Genesis) },
 		firehoseGethVersion,
-		params.FirehoseVersion(),
-		params.Variant,
-	)
+	); err != nil {
+		return fmt.Errorf("initializing firehose: %w", err)
+	}
 
 	return nil
 }
