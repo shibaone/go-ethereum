@@ -164,9 +164,6 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb, txFirehoseContext)
 
-	// We need to set it back because each transaction executes in the EVM with it's own context
-	evm.SetFirehoseContext(txFirehoseContext)
-
 	var result *ExecutionResult
 
 	var err error
