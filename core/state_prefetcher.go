@@ -167,7 +167,7 @@ func (p *statePrefetcher) PrefetchMining(txs TransactionsByPriceAndNonce, header
 // the transaction successfully, rather to warm up touched data slots.
 func precacheTransaction(msg *Message, config *params.ChainConfig, gaspool *GasPool, statedb *state.StateDB, header *types.Header, evm *vm.EVM) error {
 	// Update the evm with the new transaction context.
-	evm.Reset(NewEVMTxContext(msg), statedb)
+	evm.Reset(NewEVMTxContext(msg), statedb, firehose.NoOpContext)
 	// Add addresses to access list if applicable
 	_, err := ApplyMessage(evm, msg, gaspool)
 	if err == nil {

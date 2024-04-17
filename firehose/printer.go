@@ -17,6 +17,13 @@ import (
 )
 
 type Printer interface {
+	// Write is a raw write to the printer mainly appending pre-formatted Firehose
+	// lines in bytes to it. Depending on the printer, it may or may not print
+	// to stdout.
+	Write(in []byte)
+
+	// Print prints the input to the printer formatting the received input
+	// with `"FIRE" + join(<input>, " ") + "\n"`.
 	Print(input ...string)
 }
 
@@ -28,20 +35,32 @@ func (p *DelegateToWriterPrinter) Disabled() bool {
 	return false
 }
 
+func (p *DelegateToWriterPrinter) Write(in []byte) {
+	flushToFirehose(in, p.writer)
+}
+
 func (p *DelegateToWriterPrinter) Print(input ...string) {
-	line := "FIRE " + strings.Join(input, " ") + "\n"
+	flushToFirehose([]byte("FIRE "+strings.Join(input, " ")+"\n"), p.writer)
+}
+
+// flushToFirehose sends data to Firehose via `io.Writter` checking for errors
+// and retrying if necessary.
+//
+// If error is still present after 10 retries, prints an error message to `writer`
+// as well as writing file `/tmp/firehose_writer_failed_print.log` with the same
+// error message.
+func flushToFirehose(in []byte, writer io.Writer) {
 	var written int
 	var err error
 	loops := 10
 	for i := 0; i < loops; i++ {
-		written, err = fmt.Fprint(p.writer, line)
+		written, err = writer.Write(in)
 
-		if len(line) == written {
+		if len(in) == written {
 			return
 		}
 
-		line = line[written:]
-
+		in = in[written:]
 		if i == loops-1 {
 			break
 		}
@@ -49,21 +68,38 @@ func (p *DelegateToWriterPrinter) Print(input ...string) {
 
 	errstr := fmt.Sprintf("\nFIREHOSE FAILED WRITING %dx: %s\n", loops, err)
 	ioutil.WriteFile("/tmp/firehose_writer_failed_print.log", []byte(errstr), 0644)
-	fmt.Fprint(p.writer, errstr)
+	fmt.Fprint(writer, errstr)
 }
 
 type ToBufferPrinter struct {
 	buffer *bytes.Buffer
 }
 
-func NewToBufferPrinter() *ToBufferPrinter {
+func NewToBufferPrinter(initialAllocationSizeInBytes int) *ToBufferPrinter {
 	return &ToBufferPrinter{
-		buffer: bytes.NewBuffer(nil),
+		buffer: bytes.NewBuffer(make([]byte, 0, initialAllocationSizeInBytes)),
 	}
+}
+
+func NewToBufferPrinterWithBuffer(buffer *bytes.Buffer) *ToBufferPrinter {
+	// Force a reset to ensure we start with a clean buffer
+	buffer.Reset()
+
+	return &ToBufferPrinter{
+		buffer: buffer,
+	}
+}
+
+func (p *ToBufferPrinter) Reset() {
+	p.buffer.Reset()
 }
 
 func (p *ToBufferPrinter) Disabled() bool {
 	return false
+}
+
+func (p *ToBufferPrinter) Write(in []byte) {
+	p.buffer.Write(in)
 }
 
 func (p *ToBufferPrinter) Print(input ...string) {
@@ -99,6 +135,9 @@ func Hex(in []byte) string {
 }
 
 func BigInt(in *big.Int) string {
+	if in == nil {
+		return "00"
+	}
 	return Hex(in.Bytes())
 }
 
@@ -124,12 +163,12 @@ func JSON(in interface{}) string {
 }
 
 func ReportHeaderComparisonResult(actual *types.Header, expected *types.Header) {
-	reportToUser("There is a mismatch between Firehose genesis block and actual chain's stored genesis block, the actual genesis")
-	reportToUser("block's hash field extracted from Geth's database does not fit with hash of genesis block generated")
-	reportToUser("from Firehose determined genesis config, you might need to provide the correct 'genesis.json' file")
-	reportToUser("via --firehose-genesis-file")
-	reportToUser("")
-	reportToUser("Comparison of the actual Firehose recomputed genesis block <> expected Geth genesis block")
+	ReportToUser("There is a mismatch between Firehose genesis block and actual chain's stored genesis block, the actual genesis")
+	ReportToUser("block's hash field extracted from Geth's database does not fit with hash of genesis block generated")
+	ReportToUser("from Firehose determined genesis config, you might need to provide the correct 'genesis.json' file")
+	ReportToUser("via --firehose-genesis-file")
+	ReportToUser("")
+	ReportToUser("Comparison of the actual Firehose recomputed genesis block <> expected Geth genesis block")
 
 	compareAddress := fieldComparisonReporter(func(x interface{}) string { return x.(common.Address).String() })
 	compareHash := fieldComparisonReporter(func(x interface{}) string { return x.(common.Hash).String() })
@@ -160,7 +199,7 @@ func ReportHeaderComparisonResult(actual *types.Header, expected *types.Header) 
 	compareHash("MixDigest", actual.MixDigest, expected.MixDigest)
 	compareUint64("Nonce", actual.Nonce.Uint64(), expected.Nonce.Uint64())
 
-	reportToUser("")
+	ReportToUser("")
 }
 
 func fieldComparisonReporter(toString func(x interface{}) string) func(field string, actual interface{}, expected interface{}) {
@@ -173,10 +212,10 @@ func fieldComparisonReporter(toString func(x interface{}) string) func(field str
 			sign = "=="
 		}
 
-		reportToUser("%s [(actual) %s %s %s (expected)]", field, resolvedActual, sign, resolvedExpected)
+		ReportToUser("%s [(actual) %s %s %s (expected)]", field, resolvedActual, sign, resolvedExpected)
 	}
 }
 
-func reportToUser(format string, args ...interface{}) {
+func ReportToUser(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }

@@ -35,11 +35,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/structs"
-	pcsclite "github.com/gballet/go-libpcsclite"
-	gopsutil "github.com/shirou/gopsutil/mem"
-	"github.com/urfave/cli/v2"
-
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -74,9 +69,13 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
-	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
+	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/ethereum/go-ethereum/triedb/hashdb"
+	"github.com/ethereum/go-ethereum/triedb/pathdb"
+	"github.com/fatih/structs"
+	pcsclite "github.com/gballet/go-libpcsclite"
+	gopsutil "github.com/shirou/gopsutil/mem"
+	"github.com/urfave/cli/v2"
 )
 
 // These are all the command line flags we support.
@@ -92,6 +91,12 @@ var (
 		Name:     "datadir",
 		Usage:    "Data directory for the databases and keystore",
 		Value:    flags.DirectoryString(node.DefaultDataDir()),
+		Category: flags.EthCategory,
+	}
+	SeparateDBFlag = &cli.BoolFlag{
+		Name: "separatedb",
+		Usage: "Enable a separated trie database, it will be created within a subdirectory called state, " +
+			"Users can copy this state directory to another directory or disk, and then create a symbolic link to the state directory under the chaindata",
 		Category: flags.EthCategory,
 	}
 	DirectBroadcastFlag = &cli.BoolFlag{
@@ -143,6 +148,12 @@ var (
 	MinFreeDiskSpaceFlag = &flags.DirectoryFlag{
 		Name:     "datadir.minfreedisk",
 		Usage:    "Minimum free disk space in MB, once reached triggers auto shut down (default = --cache.gc converted to MB, 0 = disabled)",
+		Category: flags.EthCategory,
+	}
+	InstanceFlag = &cli.IntFlag{
+		Name:     "instance",
+		Usage:    "Configures the ports to avoid conflicts when running multiple nodes on the same machine. Maximum is 200. Only applicable for: port, authrpc.port, discovery,port, http.port, ws.port",
+		Value:    1,
 		Category: flags.EthCategory,
 	}
 	KeyStoreDirFlag = &flags.DirectoryFlag{
@@ -294,16 +305,6 @@ var (
 		Usage:    "Manually specify the Rialto Genesis Hash, to trigger builtin network logic",
 		Category: flags.EthCategory,
 	}
-	OverrideShanghai = &cli.Uint64Flag{
-		Name:     "override.shanghai",
-		Usage:    "Manually specify the Shanghai fork timestamp, overriding the bundled setting",
-		Category: flags.EthCategory,
-	}
-	OverrideKepler = &cli.Uint64Flag{
-		Name:     "override.kepler",
-		Usage:    "Manually specify the Kepler fork timestamp, overriding the bundled setting",
-		Category: flags.EthCategory,
-	}
 	OverrideCancun = &cli.Uint64Flag{
 		Name:     "override.cancun",
 		Usage:    "Manually specify the Cancun fork timestamp, overriding the bundled setting",
@@ -320,8 +321,25 @@ var (
 		Category: flags.EthCategory,
 	}
 	OverrideFeynmanFix = &cli.Uint64Flag{
-		Name:     "override.feynmanfix",
-		Usage:    "Manually specify the FeynmanFix fork timestamp, overriding the bundled setting",
+		Name:  "override.feynmanfix",
+		Usage: "Manually specify the FeynmanFix fork timestamp, overriding the bundled setting",
+	}
+	OverrideFullImmutabilityThreshold = &cli.Uint64Flag{
+		Name:     "override.immutabilitythreshold",
+		Usage:    "It is the number of blocks after which a chain segment is considered immutable, only for testing purpose",
+		Value:    params.FullImmutabilityThreshold,
+		Category: flags.EthCategory,
+	}
+	OverrideMinBlocksForBlobRequests = &cli.Uint64Flag{
+		Name:     "override.minforblobrequest",
+		Usage:    "It keeps blob data available for min blocks in local, only for testing purpose",
+		Value:    params.MinBlocksForBlobRequests,
+		Category: flags.EthCategory,
+	}
+	OverrideDefaultExtraReserveForBlobRequests = &cli.Uint64Flag{
+		Name:     "override.defaultextrareserve",
+		Usage:    "It adds more extra time for expired blobs for some request cases, only for testing purpose",
+		Value:    params.DefaultExtraReserveForBlobRequests,
 		Category: flags.EthCategory,
 	}
 	SyncModeFlag = &flags.TextMarshalerFlag{
@@ -660,9 +678,9 @@ var (
 	}
 
 	// MISC settings
-	SyncTargetFlag = &cli.PathFlag{
+	SyncTargetFlag = &cli.StringFlag{
 		Name:      "synctarget",
-		Usage:     `File for containing the hex-encoded block-rlp as sync target(dev feature)`,
+		Usage:     `Hash of the block to full sync to (dev testing feature)`,
 		TakesFile: true,
 		Category:  flags.MiscCategory,
 	}
@@ -1100,6 +1118,14 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 		Usage:    "Path for the voteJournal dir in fast finality feature (default = inside the datadir)",
 		Category: flags.FastFinalityCategory,
 	}
+
+	// Blob setting
+	BlobExtraReserveFlag = &cli.Uint64Flag{
+		Name:     "blob.extra-reserve",
+		Usage:    "Extra reserve threshold for blob, blob never expires when 0 is set, default 28800",
+		Value:    params.DefaultExtraReserveForBlobRequests,
+		Category: flags.MiscCategory,
+	}
 )
 
 var (
@@ -1110,13 +1136,15 @@ var (
 	// NetworkFlags is the flag group of all built-in supported networks.
 	NetworkFlags = append([]cli.Flag{BSCMainnetFlag}, TestnetFlags...)
 
-	// DatabasePathFlags is the flag group of all database path flags.
-	DatabasePathFlags = []cli.Flag{
+	// DatabaseFlags is the flag group of all database flags.
+	DatabaseFlags = []cli.Flag{
 		DataDirFlag,
 		AncientFlag,
 		RemoteDBFlag,
 		DBEngineFlag,
+		StateSchemeFlag,
 		HttpHeaderFlag,
+		SeparateDBFlag,
 	}
 )
 
@@ -1133,7 +1161,7 @@ func MakeDataDir(ctx *cli.Context) string {
 
 // setNodeKey creates a node key from set command line flags, either loading it
 // from a file or as a specified hex value. If neither flags were provided, this
-// method returns nil and an emphemeral key is to be generated.
+// method returns nil and an ephemeral key is to be generated.
 func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 	var (
 		hex  = ctx.String(NodeKeyHexFlag.Name)
@@ -1166,26 +1194,37 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 
 // setBootstrapNodes creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
+// Priority order for bootnodes configuration:
+//
+// 1. --bootnodes flag
+// 2. Config file
+// 3. Network preset flags (e.g. --goerli)
+// 4. default to mainnet nodes
 func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 	urls := params.MainnetBootnodes
-	switch {
-	case ctx.IsSet(BootnodesFlag.Name):
+	if ctx.IsSet(BootnodesFlag.Name) {
 		urls = SplitAndTrim(ctx.String(BootnodesFlag.Name))
-	case cfg.BootstrapNodes != nil:
-		return // already set, don't apply defaults.
+	} else {
+		if cfg.BootstrapNodes != nil {
+			return // Already set by config file, don't apply defaults.
+		}
 	}
+	cfg.BootstrapNodes = mustParseBootnodes(urls)
+}
 
-	cfg.BootstrapNodes = make([]*enode.Node, 0, len(urls))
+func mustParseBootnodes(urls []string) []*enode.Node {
+	nodes := make([]*enode.Node, 0, len(urls))
 	for _, url := range urls {
 		if url != "" {
 			node, err := enode.Parse(enode.ValidSchemes, url)
 			if err != nil {
 				log.Crit("Bootstrap URL invalid", "enode", url, "err", err)
-				continue
+				return nil
 			}
-			cfg.BootstrapNodes = append(cfg.BootstrapNodes, node)
+			nodes = append(nodes, node)
 		}
 	}
+	return nodes
 }
 
 // setBootstrapNodesV5 creates a list of bootstrap nodes from the command line
@@ -1529,6 +1568,7 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 
 // SetNodeConfig applies node-related command line flags to the config.
 func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
+	setInstance(ctx, cfg)
 	SetP2PConfig(ctx, &cfg.P2P)
 	setIPC(ctx, cfg)
 	setHTTP(ctx, cfg)
@@ -1590,6 +1630,13 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 		}
 		log.Info(fmt.Sprintf("Using %s as db engine", dbEngine))
 		cfg.DBEngine = dbEngine
+	}
+	// deprecation notice for log debug flags (TODO: find a more appropriate place to put these?)
+	if ctx.IsSet(LogBacktraceAtFlag.Name) {
+		log.Warn("log.backtrace flag is deprecated")
+	}
+	if ctx.IsSet(LogDebugFlag.Name) {
+		log.Warn("log.debug flag is deprecated")
 	}
 }
 
@@ -1831,7 +1878,9 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	log.Debug("Sanitizing Go's GC trigger", "percent", int(gogc))
 	godebug.SetGCPercent(int(gogc))
 
-	if ctx.IsSet(SyncModeFlag.Name) {
+	if ctx.IsSet(SyncTargetFlag.Name) {
+		cfg.SyncMode = downloader.FullSync // dev sync target forces full sync
+	} else if ctx.IsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *flags.GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)
 	}
 	if ctx.IsSet(NetworkIdFlag.Name) {
@@ -1901,12 +1950,14 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Parse transaction history flag, if user is still using legacy config
 	// file with 'TxLookupLimit' configured, copy the value to 'TransactionHistory'.
 	if cfg.TransactionHistory == ethconfig.Defaults.TransactionHistory && cfg.TxLookupLimit != ethconfig.Defaults.TxLookupLimit {
-		log.Crit("The config option 'TxLookupLimit' is deprecated and may cause unexpected performance degradation issues, please use 'TransactionHistory' instead")
+		log.Warn("The config option 'TxLookupLimit' is deprecated and will be removed, please use 'TransactionHistory'")
+		cfg.TransactionHistory = cfg.TxLookupLimit
 	}
 	if ctx.IsSet(TransactionHistoryFlag.Name) {
 		cfg.TransactionHistory = ctx.Uint64(TransactionHistoryFlag.Name)
 	} else if ctx.IsSet(TxLookupLimitFlag.Name) {
-		log.Crit("The flag --txlookuplimit is deprecated and may cause unexpected performance degradation issues. Please use --history.transactions instead")
+		log.Warn("The flag --txlookuplimit is deprecated and will be removed, please use --history.transactions")
+		cfg.TransactionHistory = ctx.Uint64(TxLookupLimitFlag.Name)
 	}
 	if ctx.IsSet(PathDBSyncFlag.Name) {
 		cfg.PathSyncFlush = true
@@ -1914,6 +1965,9 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if ctx.String(GCModeFlag.Name) == "archive" && cfg.TransactionHistory != 0 {
 		cfg.TransactionHistory = 0
 		log.Warn("Disabled transaction unindexing for archive node")
+
+		cfg.StateScheme = rawdb.HashScheme
+		log.Warn("Forcing hash state-scheme for archive mode")
 	}
 	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheTrieFlag.Name) {
 		cfg.TrieCleanCache = ctx.Int(CacheFlag.Name) * ctx.Int(CacheTrieFlag.Name) / 100
@@ -1931,6 +1985,16 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		if cfg.TriesVerifyMode.NeedRemoteVerify() {
 			cfg.EnableTrustProtocol = true
 		}
+		// A node without trie is not able to provide snap data, so it should disable snap protocol.
+		if cfg.TriesVerifyMode != core.LocalVerify {
+			log.Info("Automatically disables snap protocol due to verify mode", "mode", cfg.TriesVerifyMode)
+			cfg.DisableSnapProtocol = true
+		}
+
+		if cfg.SyncMode == downloader.SnapSync && cfg.TriesVerifyMode.NoTries() {
+			log.Warn("Only local TriesVerifyMode can support snap sync, resetting to full sync", "mode", cfg.TriesVerifyMode)
+			cfg.SyncMode = downloader.FullSync
+		}
 	}
 	if ctx.IsSet(CacheFlag.Name) || ctx.IsSet(CacheSnapshotFlag.Name) {
 		cfg.SnapshotCache = ctx.Int(CacheFlag.Name) * ctx.Int(CacheSnapshotFlag.Name) / 100
@@ -1938,10 +2002,16 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if ctx.IsSet(CacheLogSizeFlag.Name) {
 		cfg.FilterLogCacheSize = ctx.Int(CacheLogSizeFlag.Name)
 	}
-	if !ctx.Bool(SnapshotFlag.Name) {
+	if !ctx.Bool(SnapshotFlag.Name) || cfg.SnapshotCache == 0 {
 		// If snap-sync is requested, this flag is also required
 		if cfg.SyncMode == downloader.SnapSync {
-			log.Info("Snap sync requested, enabling --snapshot")
+			if !ctx.Bool(SnapshotFlag.Name) {
+				log.Warn("Snap sync requested, enabling --snapshot")
+			}
+			if cfg.SnapshotCache == 0 {
+				log.Warn("Snap sync requested, resetting --cache.snapshot")
+				cfg.SnapshotCache = ctx.Int(CacheFlag.Name) * CacheSnapshotFlag.Value / 100
+			}
 		} else {
 			cfg.TrieCleanCache += cfg.SnapshotCache
 			cfg.SnapshotCache = 0 // Disabled
@@ -2042,7 +2112,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		log.Info("Using developer account", "address", developer.Address)
 
 		// Create a new developer genesis block or reuse existing one
-		cfg.Genesis = core.DeveloperGenesisBlock(ctx.Uint64(DeveloperGasLimitFlag.Name), developer.Address)
+		cfg.Genesis = core.DeveloperGenesisBlock(ctx.Uint64(DeveloperGasLimitFlag.Name), &developer.Address)
 		if ctx.IsSet(DataDirFlag.Name) {
 			// If datadir doesn't exist we need to open db in write-mode
 			// so leveldb can create files.
@@ -2055,6 +2125,21 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			chaindb := MakeChainDatabase(ctx, stack, readonly, false)
 			if rawdb.ReadCanonicalHash(chaindb, 0) != (common.Hash{}) {
 				cfg.Genesis = nil // fallback to db content
+
+				// validate genesis has PoS enabled in block 0
+				genesis, err := core.ReadGenesis(chaindb)
+				if err != nil {
+					Fatalf("Could not read genesis from database: %v", err)
+				}
+				if !genesis.Config.TerminalTotalDifficultyPassed {
+					Fatalf("Bad developer-mode genesis configuration: terminalTotalDifficultyPassed must be true in developer mode")
+				}
+				if genesis.Config.TerminalTotalDifficulty == nil {
+					Fatalf("Bad developer-mode genesis configuration: terminalTotalDifficulty must be specified.")
+				}
+				if genesis.Difficulty.Cmp(genesis.Config.TerminalTotalDifficulty) != 1 {
+					Fatalf("Bad developer-mode genesis configuration: genesis block difficulty must be > terminalTotalDifficulty")
+				}
 			}
 			chaindb.Close()
 		}
@@ -2073,6 +2158,18 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	log.Info("Initializing the KZG library", "backend", ctx.String(CryptoKZGFlag.Name))
 	if err := kzg4844.UseCKZG(ctx.String(CryptoKZGFlag.Name) == "ckzg"); err != nil {
 		Fatalf("Failed to set KZG library implementation to %s: %v", ctx.String(CryptoKZGFlag.Name), err)
+	}
+
+	// blob setting
+	if ctx.IsSet(OverrideDefaultExtraReserveForBlobRequests.Name) {
+		cfg.BlobExtraReserve = ctx.Uint64(OverrideDefaultExtraReserveForBlobRequests.Name)
+	}
+	if ctx.IsSet(BlobExtraReserveFlag.Name) {
+		extraReserve := ctx.Uint64(BlobExtraReserveFlag.Name)
+		if extraReserve > 0 && extraReserve < params.DefaultExtraReserveForBlobRequests {
+			extraReserve = params.DefaultExtraReserveForBlobRequests
+		}
+		cfg.BlobExtraReserve = extraReserve
 	}
 }
 
@@ -2133,7 +2230,7 @@ func EnableBuildInfo(gitCommit, gitDate string) SetupMetricsOption {
 	}
 }
 
-func EnableMinerInfo(ctx *cli.Context, minerConfig miner.Config) SetupMetricsOption {
+func EnableMinerInfo(ctx *cli.Context, minerConfig *miner.Config) SetupMetricsOption {
 	return func() {
 		if ctx.Bool(MiningEnabledFlag.Name) {
 			// register miner info into metrics
@@ -2156,10 +2253,13 @@ func RegisterFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconf
 	return filterSystem
 }
 
-func EnableNodeInfo(poolConfig legacypool.Config) SetupMetricsOption {
+func EnableNodeInfo(poolConfig *legacypool.Config, nodeInfo *p2p.NodeInfo) SetupMetricsOption {
 	return func() {
 		// register node info into metrics
 		metrics.NewRegisteredLabel("node-info", nil).Mark(map[string]interface{}{
+			"Enode":        nodeInfo.Enode,
+			"ENR":          nodeInfo.ENR,
+			"ID":           nodeInfo.ID,
 			"PriceLimit":   poolConfig.PriceLimit,
 			"PriceBump":    poolConfig.PriceBump,
 			"AccountSlots": poolConfig.AccountSlots,
@@ -2256,12 +2356,11 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
 	return tagsMap
 }
 
-// MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.
+// MakeChainDatabase opens a database using the flags passed to the client and will hard crash if it fails.
 func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly, disableFreeze bool) ethdb.Database {
 	var (
 		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
 		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
-
 		err     error
 		chainDb ethdb.Database
 	)
@@ -2277,11 +2376,27 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly, disableFree
 		chainDb, err = stack.OpenDatabase("lightchaindata", cache, handles, "", readonly)
 	default:
 		chainDb, err = stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(AncientFlag.Name), "", readonly, disableFreeze, false, false)
+		// set the separate state database
+		if stack.IsSeparatedDB() && err == nil {
+			stateDiskDb := MakeStateDataBase(ctx, stack, readonly, false)
+			chainDb.SetStateStore(stateDiskDb)
+		}
 	}
 	if err != nil {
 		Fatalf("Could not open database: %v", err)
 	}
 	return chainDb
+}
+
+// MakeStateDataBase open a separate state database using the flags passed to the client and will hard crash if it fails.
+func MakeStateDataBase(ctx *cli.Context, stack *node.Node, readonly, disableFreeze bool) ethdb.Database {
+	cache := ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
+	handles := MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name)) / 2
+	statediskdb, err := stack.OpenDatabaseWithFreezer("chaindata/state", cache, handles, "", "", readonly, disableFreeze, false, false)
+	if err != nil {
+		Fatalf("Failed to open separate trie database: %v", err)
+	}
+	return statediskdb
 }
 
 // tryMakeReadOnlyDatabase try to open the chain database in read-only mode,
@@ -2319,7 +2434,7 @@ func DialRPCWithHeaders(endpoint string, headers []string) (*rpc.Client, error) 
 	}
 	var opts []rpc.ClientOption
 	if len(headers) > 0 {
-		var customHeaders = make(http.Header)
+		customHeaders := make(http.Header)
 		for _, h := range headers {
 			kv := strings.Split(h, ":")
 			if len(kv) != 2 {
@@ -2426,9 +2541,10 @@ func MakeConsolePreloads(ctx *cli.Context) []string {
 }
 
 // MakeTrieDatabase constructs a trie database based on the configured scheme.
-func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, readOnly bool) *trie.Database {
-	config := &trie.Config{
+func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, readOnly bool, isVerkle bool) *triedb.Database {
+	config := &triedb.Config{
 		Preimages: preimage,
+		IsVerkle:  isVerkle,
 	}
 	scheme, err := rawdb.ParseStateScheme(ctx.String(StateSchemeFlag.Name), disk)
 	if err != nil {
@@ -2439,14 +2555,14 @@ func MakeTrieDatabase(ctx *cli.Context, disk ethdb.Database, preimage bool, read
 		// ignore the parameter silently. TODO(rjl493456442)
 		// please config it if read mode is implemented.
 		config.HashDB = hashdb.Defaults
-		return trie.NewDatabase(disk, config)
+		return triedb.NewDatabase(disk, config)
 	}
 	if readOnly {
 		config.PathDB = pathdb.ReadOnly
 	} else {
 		config.PathDB = pathdb.Defaults
 	}
-	return trie.NewDatabase(disk, config)
+	return triedb.NewDatabase(disk, config)
 }
 
 // ParseCLIAndConfigStateScheme parses state scheme in CLI and config.
@@ -2466,4 +2582,25 @@ func ParseCLIAndConfigStateScheme(cliScheme, cfgScheme string) (string, error) {
 		return cliScheme, nil
 	}
 	return "", fmt.Errorf("incompatible state scheme, CLI: %s, config: %s", cliScheme, cfgScheme)
+}
+
+// setInstance configures the port numbers for the given instance.
+func setInstance(ctx *cli.Context, cfg *node.Config) {
+	if ctx.IsSet(InstanceFlag.Name) {
+		cfg.Instance = ctx.Int(InstanceFlag.Name)
+	}
+
+	if cfg.Instance > 200 {
+		Fatalf("Instance number %d is too high, maximum is 200", cfg.Instance)
+	}
+
+	if cfg.Instance == 1 { // using default ports
+		return
+	}
+
+	cfg.AuthPort = node.DefaultConfig.AuthPort + cfg.Instance*100 - 100
+	cfg.HTTPPort = node.DefaultHTTPPort - cfg.Instance + 1
+	cfg.WSPort = node.DefaultWSPort + cfg.Instance*2 - 2
+	cfg.P2P.ListenAddr = fmt.Sprintf(":%d", node.DefaultListenPort+cfg.Instance-1)
+	cfg.P2P.DiscAddr = fmt.Sprintf(":%d", node.DefaultDiscPort+cfg.Instance-1)
 }

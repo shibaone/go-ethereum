@@ -22,10 +22,11 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"runtime"
+	"strings"
 	"unicode"
 
-	"github.com/naoina/toml"
-	"github.com/urfave/cli/v2"
+	"github.com/ethereum/go-ethereum/eth/downloader"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/external"
@@ -43,6 +44,8 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/naoina/toml"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -182,14 +185,6 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		params.RialtoGenesisHash = common.HexToHash(v)
 	}
 
-	if ctx.IsSet(utils.OverrideShanghai.Name) {
-		v := ctx.Uint64(utils.OverrideShanghai.Name)
-		cfg.Eth.OverrideShanghai = &v
-	}
-	if ctx.IsSet(utils.OverrideKepler.Name) {
-		v := ctx.Uint64(utils.OverrideKepler.Name)
-		cfg.Eth.OverrideKepler = &v
-	}
 	if ctx.IsSet(utils.OverrideCancun.Name) {
 		v := ctx.Uint64(utils.OverrideCancun.Name)
 		cfg.Eth.OverrideCancun = &v
@@ -206,7 +201,34 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		v := ctx.Uint64(utils.OverrideFeynmanFix.Name)
 		cfg.Eth.OverrideFeynmanFix = &v
 	}
-	backend, _ := utils.RegisterEthService(stack, &cfg.Eth)
+	if ctx.IsSet(utils.OverrideFullImmutabilityThreshold.Name) {
+		params.FullImmutabilityThreshold = ctx.Uint64(utils.OverrideFullImmutabilityThreshold.Name)
+		downloader.FullMaxForkAncestry = ctx.Uint64(utils.OverrideFullImmutabilityThreshold.Name)
+	}
+	if ctx.IsSet(utils.OverrideMinBlocksForBlobRequests.Name) {
+		params.MinBlocksForBlobRequests = ctx.Uint64(utils.OverrideMinBlocksForBlobRequests.Name)
+	}
+	if ctx.IsSet(utils.OverrideDefaultExtraReserveForBlobRequests.Name) {
+		params.DefaultExtraReserveForBlobRequests = ctx.Uint64(utils.OverrideDefaultExtraReserveForBlobRequests.Name)
+	}
+	if ctx.IsSet(utils.SeparateDBFlag.Name) && !stack.IsSeparatedDB() {
+		utils.Fatalf("Failed to locate separate database subdirectory when separatedb parameter has been set")
+	}
+	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
+
+	// Create gauge with geth system and build information
+	if eth != nil { // The 'eth' backend may be nil in light mode
+		var protos []string
+		for _, p := range eth.Protocols() {
+			protos = append(protos, fmt.Sprintf("%v/%d", p.Name, p.Version))
+		}
+		metrics.NewRegisteredGaugeInfo("geth/info", nil).Update(metrics.GaugeInfoValue{
+			"arch":      runtime.GOARCH,
+			"os":        runtime.GOOS,
+			"version":   cfg.Node.Version,
+			"protocols": strings.Join(protos, ","),
+		})
+	}
 
 	// Configure log filter RPC API.
 	filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
@@ -215,7 +237,6 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 	if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {
 		utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
 	}
-
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
 		utils.RegisterEthStatsService(stack, backend, cfg.Ethstats.URL)
@@ -224,8 +245,8 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 	git, _ := version.VCS()
 	utils.SetupMetrics(ctx,
 		utils.EnableBuildInfo(git.Commit, git.Date),
-		utils.EnableMinerInfo(ctx, cfg.Eth.Miner),
-		utils.EnableNodeInfo(cfg.Eth.TxPool),
+		utils.EnableMinerInfo(ctx, &cfg.Eth.Miner),
+		utils.EnableNodeInfo(&cfg.Eth.TxPool, stack.Server().NodeInfo()),
 	)
 	return stack, backend
 }

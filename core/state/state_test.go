@@ -19,7 +19,6 @@ package state
 import (
 	"bytes"
 	"encoding/json"
-	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -28,7 +27,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/firehose"
-	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/holiman/uint256"
 )
 
 type stateEnv struct {
@@ -44,17 +44,17 @@ func newStateEnv() *stateEnv {
 
 func TestDump(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
-	tdb := NewDatabaseWithConfig(db, &trie.Config{Preimages: true})
+	tdb := NewDatabaseWithConfig(db, &triedb.Config{Preimages: true})
 	sdb, _ := New(types.EmptyRootHash, tdb, nil)
 	s := &stateEnv{db: db, state: sdb}
 
 	// generate a few entries
-	obj1 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x01}), false, firehose.NoOpContext)
-	obj1.AddBalance(big.NewInt(22), firehose.NoOpContext, "test")
-	obj2 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x01, 0x02}), false, firehose.NoOpContext)
+	obj1 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x01}), false, firehose.NoOpContext)
+	obj1.AddBalance(uint256.NewInt(22), firehose.NoOpContext, "test")
+	obj2 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x01, 0x02}), false, firehose.NoOpContext)
 	obj2.SetCode(crypto.Keccak256Hash([]byte{3, 3, 3, 3, 3, 3, 3}), []byte{3, 3, 3, 3, 3, 3, 3}, firehose.NoOpContext)
-	obj3 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x02}), false, firehose.NoOpContext)
-	obj3.SetBalance(big.NewInt(44), firehose.NoOpContext, "test")
+	obj3 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x02}), false, firehose.NoOpContext)
+	obj3.SetBalance(uint256.NewInt(44), firehose.NoOpContext, "test")
 
 	// write some of them to the trie
 	s.state.updateStateObject(obj1)
@@ -74,6 +74,7 @@ func TestDump(t *testing.T) {
             "nonce": 0,
             "root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
             "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "address": "0x0000000000000000000000000000000000000001",
             "key": "0x1468288056310c82aa4c01a7e12a10f8111a0560e72b700555479031b86c357d"
         },
         "0x0000000000000000000000000000000000000002": {
@@ -81,6 +82,7 @@ func TestDump(t *testing.T) {
             "nonce": 0,
             "root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
             "codeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "address": "0x0000000000000000000000000000000000000002",
             "key": "0xd52688a8f926c816ca1e079067caba944f158e764817b83fc43594370ca9cf62"
         },
         "0x0000000000000000000000000000000000000102": {
@@ -89,6 +91,7 @@ func TestDump(t *testing.T) {
             "root": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
             "codeHash": "0x87874902497a5bb968da31a2998d8f22e949d1ef6214bcdedd8bae24cca4b9e3",
             "code": "0x03030303030303",
+            "address": "0x0000000000000000000000000000000000000102",
             "key": "0xa17eacbc25cda025e81db9c5c62868822c73ce097cee2a63e33a2e41268358a1"
         }
     }
@@ -100,19 +103,19 @@ func TestDump(t *testing.T) {
 
 func TestIterativeDump(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
-	tdb := NewDatabaseWithConfig(db, &trie.Config{Preimages: true})
+	tdb := NewDatabaseWithConfig(db, &triedb.Config{Preimages: true})
 	sdb, _ := New(types.EmptyRootHash, tdb, nil)
 	s := &stateEnv{db: db, state: sdb}
 
 	// generate a few entries
-	obj1 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x01}), false, firehose.NoOpContext)
-	obj1.AddBalance(big.NewInt(22), firehose.NoOpContext, "test")
-	obj2 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x01, 0x02}), false, firehose.NoOpContext)
+	obj1 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x01}), false, firehose.NoOpContext)
+	obj1.AddBalance(uint256.NewInt(22), firehose.NoOpContext, "test")
+	obj2 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x01, 0x02}), false, firehose.NoOpContext)
 	obj2.SetCode(crypto.Keccak256Hash([]byte{3, 3, 3, 3, 3, 3, 3}), []byte{3, 3, 3, 3, 3, 3, 3}, firehose.NoOpContext)
-	obj3 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x02}), false, firehose.NoOpContext)
-	obj3.SetBalance(big.NewInt(44), firehose.NoOpContext, "test")
-	obj4 := s.state.GetOrNewStateObject(common.BytesToAddress([]byte{0x00}), false, firehose.NoOpContext)
-	obj4.AddBalance(big.NewInt(1337), firehose.NoOpContext, "test")
+	obj3 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x02}), false, firehose.NoOpContext)
+	obj3.SetBalance(uint256.NewInt(44), firehose.NoOpContext, "test")
+	obj4 := s.state.getOrNewStateObject(common.BytesToAddress([]byte{0x00}), false, firehose.NoOpContext)
+	obj4.AddBalance(uint256.NewInt(1337), firehose.NoOpContext, "test")
 
 	// write some of them to the trie
 	s.state.updateStateObject(obj1)
@@ -212,7 +215,7 @@ func TestSnapshot2(t *testing.T) {
 
 	// db, trie are already non-empty values
 	so0 := state.getStateObject(stateobjaddr0)
-	so0.SetBalance(big.NewInt(42), firehose.NoOpContext, "test")
+	so0.SetBalance(uint256.NewInt(42), firehose.NoOpContext, "test")
 	so0.SetNonce(43, firehose.NoOpContext)
 	so0.SetCode(crypto.Keccak256Hash([]byte{'c', 'a', 'f', 'e'}), []byte{'c', 'a', 'f', 'e'}, firehose.NoOpContext)
 	so0.selfDestructed = false
@@ -226,7 +229,7 @@ func TestSnapshot2(t *testing.T) {
 
 	// and one with deleted == true
 	so1 := state.getStateObject(stateobjaddr1)
-	so1.SetBalance(big.NewInt(52), firehose.NoOpContext, "test")
+	so1.SetBalance(uint256.NewInt(52), firehose.NoOpContext, "test")
 	so1.SetNonce(53, firehose.NoOpContext)
 	so1.SetCode(crypto.Keccak256Hash([]byte{'c', 'a', 'f', 'e', '2'}), []byte{'c', 'a', 'f', 'e', '2'}, firehose.NoOpContext)
 	so1.selfDestructed = true

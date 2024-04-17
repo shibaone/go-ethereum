@@ -134,6 +134,10 @@ func (hc *HeaderChain) getFinalizedNumber(header *types.Header) uint64 {
 	return 0
 }
 
+func (hc *HeaderChain) GenesisHeader() *types.Header {
+	panic("not supported")
+}
+
 // GetBlockNumber retrieves the block number belonging to the given hash
 // from the cache or database
 func (hc *HeaderChain) GetBlockNumber(hash common.Hash) *uint64 {
@@ -429,6 +433,10 @@ func (hc *HeaderChain) GetBlockHashesFromHash(hash common.Hash, max uint64) []co
 }
 
 func (hc *HeaderChain) GetHighestVerifiedHeader() *types.Header {
+	return nil
+}
+
+func (hc *HeaderChain) ChasingHead() *types.Header {
 	return nil
 }
 

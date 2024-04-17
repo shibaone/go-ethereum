@@ -134,20 +134,6 @@ var PrecompiledContractsPlanck = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{101}): &iavlMerkleProofValidatePlanck{},
 }
 
-// PrecompiledContractsBerlin contains the default set of pre-compiled Ethereum
-// contracts used in the Berlin release.
-var PrecompiledContractsBerlin = map[common.Address]PrecompiledContract{
-	common.BytesToAddress([]byte{1}): &ecrecover{},
-	common.BytesToAddress([]byte{2}): &sha256hash{},
-	common.BytesToAddress([]byte{3}): &ripemd160hash{},
-	common.BytesToAddress([]byte{4}): &dataCopy{},
-	common.BytesToAddress([]byte{5}): &bigModExp{eip2565: true},
-	common.BytesToAddress([]byte{6}): &bn256AddIstanbul{},
-	common.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
-	common.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
-	common.BytesToAddress([]byte{9}): &blake2F{},
-}
-
 // PrecompiledContractsLuban contains the default set of pre-compiled Ethereum
 // contracts used in the Luban release.
 var PrecompiledContractsLuban = map[common.Address]PrecompiledContract{
@@ -186,6 +172,20 @@ var PrecompiledContractsPlato = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{103}): &cometBFTLightBlockValidate{},
 }
 
+// PrecompiledContractsBerlin contains the default set of pre-compiled Ethereum
+// contracts used in the Berlin release.
+var PrecompiledContractsBerlin = map[common.Address]PrecompiledContract{
+	common.BytesToAddress([]byte{1}): &ecrecover{},
+	common.BytesToAddress([]byte{2}): &sha256hash{},
+	common.BytesToAddress([]byte{3}): &ripemd160hash{},
+	common.BytesToAddress([]byte{4}): &dataCopy{},
+	common.BytesToAddress([]byte{5}): &bigModExp{eip2565: true},
+	common.BytesToAddress([]byte{6}): &bn256AddIstanbul{},
+	common.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
+	common.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
+	common.BytesToAddress([]byte{9}): &blake2F{},
+}
+
 // PrecompiledContractsHertz contains the default set of pre-compiled Ethereum
 // contracts used in the Hertz release.
 var PrecompiledContractsHertz = map[common.Address]PrecompiledContract{
@@ -205,6 +205,27 @@ var PrecompiledContractsHertz = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{103}): &cometBFTLightBlockValidateHertz{},
 }
 
+// PrecompiledContractsFeynman contains the default set of pre-compiled Ethereum
+// contracts used in the Feynman release.
+var PrecompiledContractsFeynman = map[common.Address]PrecompiledContract{
+	common.BytesToAddress([]byte{1}): &ecrecover{},
+	common.BytesToAddress([]byte{2}): &sha256hash{},
+	common.BytesToAddress([]byte{3}): &ripemd160hash{},
+	common.BytesToAddress([]byte{4}): &dataCopy{},
+	common.BytesToAddress([]byte{5}): &bigModExp{eip2565: true},
+	common.BytesToAddress([]byte{6}): &bn256AddIstanbul{},
+	common.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
+	common.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
+	common.BytesToAddress([]byte{9}): &blake2F{},
+
+	common.BytesToAddress([]byte{100}): &tmHeaderValidate{},
+	common.BytesToAddress([]byte{101}): &iavlMerkleProofValidatePlato{},
+	common.BytesToAddress([]byte{102}): &blsSignatureVerify{},
+	common.BytesToAddress([]byte{103}): &cometBFTLightBlockValidateHertz{},
+	common.BytesToAddress([]byte{104}): &verifyDoubleSignEvidence{},
+	common.BytesToAddress([]byte{105}): &secp256k1SignatureRecover{},
+}
+
 // PrecompiledContractsCancun contains the default set of pre-compiled Ethereum
 // contracts used in the Cancun release.
 var PrecompiledContractsCancun = map[common.Address]PrecompiledContract{
@@ -218,27 +239,6 @@ var PrecompiledContractsCancun = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{8}):    &bn256PairingIstanbul{},
 	common.BytesToAddress([]byte{9}):    &blake2F{},
 	common.BytesToAddress([]byte{0x0a}): &kzgPointEvaluation{},
-
-	common.BytesToAddress([]byte{100}): &tmHeaderValidate{},
-	common.BytesToAddress([]byte{101}): &iavlMerkleProofValidatePlato{},
-	common.BytesToAddress([]byte{102}): &blsSignatureVerify{},
-	common.BytesToAddress([]byte{103}): &cometBFTLightBlockValidate{},
-	common.BytesToAddress([]byte{104}): &verifyDoubleSignEvidence{},
-	common.BytesToAddress([]byte{105}): &secp256k1SignatureRecover{},
-}
-
-// PrecompiledContractsFeynman contains the default set of pre-compiled Ethereum
-// contracts used in the Feynman release.
-var PrecompiledContractsFeynman = map[common.Address]PrecompiledContract{
-	common.BytesToAddress([]byte{1}): &ecrecover{},
-	common.BytesToAddress([]byte{2}): &sha256hash{},
-	common.BytesToAddress([]byte{3}): &ripemd160hash{},
-	common.BytesToAddress([]byte{4}): &dataCopy{},
-	common.BytesToAddress([]byte{5}): &bigModExp{eip2565: true},
-	common.BytesToAddress([]byte{6}): &bn256AddIstanbul{},
-	common.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
-	common.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
-	common.BytesToAddress([]byte{9}): &blake2F{},
 
 	common.BytesToAddress([]byte{100}): &tmHeaderValidate{},
 	common.BytesToAddress([]byte{101}): &iavlMerkleProofValidatePlato{},
@@ -264,17 +264,17 @@ var PrecompiledContractsBLS = map[common.Address]PrecompiledContract{
 
 var (
 	PrecompiledAddressesCancun    []common.Address
+	PrecompiledAddressesFeynman   []common.Address
 	PrecompiledAddressesHertz     []common.Address
+	PrecompiledAddressesBerlin    []common.Address
 	PrecompiledAddressesPlato     []common.Address
 	PrecompiledAddressesLuban     []common.Address
 	PrecompiledAddressesPlanck    []common.Address
 	PrecompiledAddressesMoran     []common.Address
 	PrecompiledAddressesNano      []common.Address
-	PrecompiledAddressesBerlin    []common.Address
 	PrecompiledAddressesIstanbul  []common.Address
 	PrecompiledAddressesByzantium []common.Address
 	PrecompiledAddressesHomestead []common.Address
-	PrecompiledAddressesFeynman   []common.Address
 )
 
 func init() {
@@ -286,9 +286,6 @@ func init() {
 	}
 	for k := range PrecompiledContractsIstanbul {
 		PrecompiledAddressesIstanbul = append(PrecompiledAddressesIstanbul, k)
-	}
-	for k := range PrecompiledContractsBerlin {
-		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
 	}
 	for k := range PrecompiledContractsNano {
 		PrecompiledAddressesNano = append(PrecompiledAddressesNano, k)
@@ -305,14 +302,17 @@ func init() {
 	for k := range PrecompiledContractsPlato {
 		PrecompiledAddressesPlato = append(PrecompiledAddressesPlato, k)
 	}
+	for k := range PrecompiledContractsBerlin {
+		PrecompiledAddressesBerlin = append(PrecompiledAddressesBerlin, k)
+	}
 	for k := range PrecompiledContractsHertz {
 		PrecompiledAddressesHertz = append(PrecompiledAddressesHertz, k)
 	}
-	for k := range PrecompiledContractsCancun {
-		PrecompiledAddressesCancun = append(PrecompiledAddressesCancun, k)
-	}
 	for k := range PrecompiledContractsFeynman {
 		PrecompiledAddressesFeynman = append(PrecompiledAddressesFeynman, k)
+	}
+	for k := range PrecompiledContractsCancun {
+		PrecompiledAddressesCancun = append(PrecompiledAddressesCancun, k)
 	}
 }
 
@@ -325,6 +325,8 @@ func ActivePrecompiles(rules params.Rules) []common.Address {
 		return PrecompiledAddressesFeynman
 	case rules.IsHertz:
 		return PrecompiledAddressesHertz
+	case rules.IsBerlin:
+		return PrecompiledAddressesBerlin
 	case rules.IsPlato:
 		return PrecompiledAddressesPlato
 	case rules.IsLuban:
@@ -335,8 +337,6 @@ func ActivePrecompiles(rules params.Rules) []common.Address {
 		return PrecompiledAddressesMoran
 	case rules.IsNano:
 		return PrecompiledAddressesNano
-	case rules.IsBerlin:
-		return PrecompiledAddressesBerlin
 	case rules.IsIstanbul:
 		return PrecompiledAddressesIstanbul
 	case rules.IsByzantium:
@@ -457,7 +457,6 @@ type bigModExp struct {
 }
 
 var (
-	big0      = big.NewInt(0)
 	big1      = big.NewInt(1)
 	big3      = big.NewInt(3)
 	big4      = big.NewInt(4)
@@ -1320,11 +1319,11 @@ func (c *blsSignatureVerify) Run(input []byte) ([]byte, error) {
 
 	if pubKeyNumber > 1 {
 		if !sig.FastAggregateVerify(pubKeys, msg) {
-			return big0.Bytes(), nil
+			return common.Big0.Bytes(), nil
 		}
 	} else {
 		if !sig.Verify(pubKeys[0], msgBytes) {
-			return big0.Bytes(), nil
+			return common.Big0.Bytes(), nil
 		}
 	}
 

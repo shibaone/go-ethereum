@@ -118,6 +118,9 @@ type Header struct {
 
 	// ExcessBlobGas was added by EIP-4844 and is ignored in legacy headers.
 	ExcessBlobGas *uint64 `json:"excessBlobGas" rlp:"optional"`
+
+	// ParentBeaconRoot was added by EIP-4788 and is ignored in legacy headers.
+	ParentBeaconRoot *common.Hash `json:"parentBeaconBlockRoot" rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -190,6 +193,11 @@ func (h *Header) EmptyReceipts() bool {
 	return h.ReceiptHash == EmptyReceiptsHash
 }
 
+// EmptyWithdrawalsHash returns true if the WithdrawalsHash is EmptyWithdrawalsHash.
+func (h *Header) EmptyWithdrawalsHash() bool {
+	return h.WithdrawalsHash != nil && *h.WithdrawalsHash == EmptyWithdrawalsHash
+}
+
 // Body is a simple (mutable, non-safe) data container for storing and moving
 // a block's data contents (transactions and uncles) together.
 type Body struct {
@@ -229,6 +237,9 @@ type Block struct {
 	// inter-peer block relay.
 	ReceivedAt   time.Time
 	ReceivedFrom interface{}
+
+	// sidecars provides DA check
+	sidecars BlobSidecars
 }
 
 // "external" block encoding. used for eth protocol, etc.
@@ -325,6 +336,10 @@ func CopyHeader(h *Header) *Header {
 		cpy.BlobGasUsed = new(uint64)
 		*cpy.BlobGasUsed = *h.BlobGasUsed
 	}
+	if h.ParentBeaconRoot != nil {
+		cpy.ParentBeaconRoot = new(common.Hash)
+		*cpy.ParentBeaconRoot = *h.ParentBeaconRoot
+	}
 	return &cpy
 }
 
@@ -404,6 +419,8 @@ func (b *Block) BaseFee() *big.Int {
 	return new(big.Int).Set(b.header.BaseFee)
 }
 
+func (b *Block) BeaconRoot() *common.Hash { return b.header.ParentBeaconRoot }
+
 func (b *Block) ExcessBlobGas() *uint64 {
 	var excessBlobGas *uint64
 	if b.header.ExcessBlobGas != nil {
@@ -442,6 +459,14 @@ func (b *Block) SanityCheck() error {
 	return b.header.SanityCheck()
 }
 
+func (b *Block) Sidecars() BlobSidecars {
+	return b.sidecars
+}
+
+func (b *Block) CleanSidecars() {
+	b.sidecars = make(BlobSidecars, 0)
+}
+
 type writeCounter uint64
 
 func (c *writeCounter) Write(b []byte) (int, error) {
@@ -466,11 +491,17 @@ func NewBlockWithHeader(header *Header) *Block {
 // WithSeal returns a new block with the data from b but the header replaced with
 // the sealed one.
 func (b *Block) WithSeal(header *Header) *Block {
+	// fill sidecars metadata
+	for _, sidecar := range b.sidecars {
+		sidecar.BlockNumber = header.Number
+		sidecar.BlockHash = header.Hash()
+	}
 	return &Block{
 		header:       CopyHeader(header),
 		transactions: b.transactions,
 		uncles:       b.uncles,
 		withdrawals:  b.withdrawals,
+		sidecars:     b.sidecars,
 	}
 }
 
@@ -481,6 +512,7 @@ func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 		transactions: make([]*Transaction, len(transactions)),
 		uncles:       make([]*Header, len(uncles)),
 		withdrawals:  b.withdrawals,
+		sidecars:     b.sidecars,
 	}
 	copy(block.transactions, transactions)
 	for i := range uncles {
@@ -495,10 +527,26 @@ func (b *Block) WithWithdrawals(withdrawals []*Withdrawal) *Block {
 		header:       b.header,
 		transactions: b.transactions,
 		uncles:       b.uncles,
+		sidecars:     b.sidecars,
 	}
 	if withdrawals != nil {
 		block.withdrawals = make([]*Withdrawal, len(withdrawals))
 		copy(block.withdrawals, withdrawals)
+	}
+	return block
+}
+
+// WithSidecars returns a block containing the given blobs.
+func (b *Block) WithSidecars(sidecars BlobSidecars) *Block {
+	block := &Block{
+		header:       b.header,
+		transactions: b.transactions,
+		uncles:       b.uncles,
+		withdrawals:  b.withdrawals,
+	}
+	if sidecars != nil {
+		block.sidecars = make(BlobSidecars, len(sidecars))
+		copy(block.sidecars, sidecars)
 	}
 	return block
 }
