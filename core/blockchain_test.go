@@ -29,7 +29,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
-	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -44,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
@@ -224,7 +224,7 @@ func testBlockChainImport(chain types.Blocks, pipelineCommit bool, blockchain *B
 		if pipelineCommit {
 			statedb.EnablePipeCommit()
 		}
-		statedb, receipts, _, usedGas, err := blockchain.processor.Process(block, statedb, vm.Config{})
+		statedb, receipts, _, usedGas, err := blockchain.processor.Process(block, statedb, vm.Config{}, firehose.NoOpContext)
 		if err != nil {
 			blockchain.reportBlock(block, receipts, err)
 			return err

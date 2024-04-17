@@ -547,12 +547,12 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		}
 
 		if firehose.GenesisConfig == nil {
-			panic(fmt.Errorf("genesis config is not set, there is something weird as all code path should generate the correct genesis config"))
+			panic(firehose.MissingGenesisPanicMessage)
 		}
 
 		genesis := firehose.GenesisConfig.(*Genesis)
 		if genesis == nil {
-			panic(fmt.Errorf("genesis config is not set, there is something weird as all code path should generate the correct genesis config"))
+			panic(firehose.MissingGenesisPanicMessage)
 		}
 
 		// As far as I can tell, the block's hash comes from the keccak hash of the rlp encoding
@@ -2221,6 +2221,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 				td := new(big.Int).Add(block.Difficulty(), ptd)
 				finalBlock := getFinalBlockForFirehose(bc, block)
 				firehoseContext.EndBlock(block, finalBlock, td)
+				firehoseContext.FlushBlock()
 			}
 
 			stats.processed++
@@ -2267,14 +2268,17 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		}
 		statedb.SetExpectedStateRoot(block.Root())
 		pstart := time.Now()
-		statedb, receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+
+		firehoseContext := firehose.NoOpContext
+		if firehose.Enabled {
+			firehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.BlockSyncBuffer)
+		}
+
+		statedb, receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, firehoseContext)
 		close(interruptCh) // state prefetch can be stopped
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			statedb.StopPrefetcher()
-			if firehoseContext := firehose.MaybeSyncContext(); firehoseContext.Enabled() {
-				firehoseContext.CancelBlock(block, err)
-			}
 			return it.index, err
 		}
 		ptime := time.Since(pstart)
@@ -2285,15 +2289,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			log.Error("validate state failed", "error", err)
 			bc.reportBlock(block, receipts, err)
 			statedb.StopPrefetcher()
-			if firehoseContext := firehose.MaybeSyncContext(); firehoseContext.Enabled() {
-				firehoseContext.CancelBlock(block, err)
-			}
 			return it.index, err
 		}
 		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
 
-		if firehoseContext := firehose.MaybeSyncContext(); firehoseContext.Enabled() {
+		if firehoseContext.Enabled() {
 			// Calculate the total difficulty of the block
 			ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 			td := new(big.Int).Add(block.Difficulty(), ptd)
@@ -2336,6 +2337,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		}
 
 		bc.cacheReceipts(block.Hash(), receipts, block)
+
+		if firehoseContext.Enabled() {
+			// This is last point where there is no more an early return due to an error, we flush here
+			firehoseContext.FlushBlock()
+		}
 
 		// Update the metrics touched during block commit
 		accountCommitTimer.Update(statedb.AccountCommits)   // Account commits are complete, we can mark them

@@ -59,15 +59,14 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (*state.StateDB, types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, firehoseContext *firehose.Context) (*state.StateDB, types.Receipts, []*types.Log, uint64, error) {
 	var (
-		usedGas         = new(uint64)
-		header          = block.Header()
-		blockHash       = block.Hash()
-		blockNumber     = block.Number()
-		allLogs         []*types.Log
-		gp              = new(GasPool).AddGas(block.GasLimit())
-		firehoseContext = firehose.MaybeSyncContext()
+		usedGas     = new(uint64)
+		header      = block.Header()
+		blockHash   = block.Hash()
+		blockNumber = block.Number()
+		allLogs     []*types.Log
+		gp          = new(GasPool).AddGas(block.GasLimit())
 	)
 
 	if firehoseContext.Enabled() {

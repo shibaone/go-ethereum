@@ -116,8 +116,9 @@ func NewSpeculativeExecutionContext(initialAllocationInBytes int) *Context {
 func NewSpeculativeExecutionContextWithBuffer(buffer *bytes.Buffer) *Context {
 	return NewContext(NewToBufferPrinterWithBuffer(buffer), true)
 }
+
 func (ctx *Context) Enabled() bool {
-	return ctx != nil
+	return ctx != nil && Enabled
 }
 
 func (ctx *Context) FirehoseLog() []byte {
@@ -186,6 +187,20 @@ func (ctx *Context) EndBlock(block *types.Block, finalBlockHeader *types.Header,
 		Uint64(uint64(block.Size())),
 		JSON(endData),
 	)
+}
+
+// FlushBlock flushes the accumulated context's printer to "stdout" and reset's the
+// context. If the printer is not a ToBufferPrinter, this is a no-op.
+func (ctx *Context) FlushBlock() {
+	if ctx == nil || !Enabled {
+		return
+	}
+
+	// We flush to stdout only if the received `ctx` accumulated all the Firehose
+	// logs in a buffer. Other context already flushed to stdout.
+	if v, ok := ctx.printer.(*ToBufferPrinter); ok {
+		syncContext.printer.Write(v.buffer.Bytes())
+	}
 
 	ctx.exitBlock()
 }
@@ -507,7 +522,6 @@ func (ctx *Context) StartCall(callType string) {
 		ctx.openCall(),
 		Uint64(ctx.totalOrderingCounter.Inc()),
 	)
-
 }
 
 func (ctx *Context) openCall() string {
