@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"strconv"
@@ -67,7 +66,7 @@ func flushToFirehose(in []byte, writer io.Writer) {
 	}
 
 	errstr := fmt.Sprintf("\nFIREHOSE FAILED WRITING %dx: %s\n", loops, err)
-	ioutil.WriteFile("/tmp/firehose_writer_failed_print.log", []byte(errstr), 0644)
+	os.WriteFile("/tmp/firehose_writer_failed_print.log", []byte(errstr), 0644)
 	fmt.Fprint(writer, errstr)
 }
 

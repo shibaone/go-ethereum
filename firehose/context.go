@@ -49,14 +49,14 @@ func SyncContext() *Context {
 	return syncContext
 }
 
-func NewContext(printer Printer, speculative bool) *Context {
+func NewContext(printer Printer, transactionScopedContext bool) *Context {
 	ctx := &Context{
 		printer: printer,
 
-		isSpeculativeContext: speculative,
-		inBlock:              atomic.NewBool(false),
-		inTransaction:        atomic.NewBool(false),
-		totalOrderingCounter: atomic.NewUint64(0),
+		transactionScopedContext: transactionScopedContext,
+		inBlock:                  atomic.NewBool(false),
+		inTransaction:            atomic.NewBool(false),
+		totalOrderingCounter:     atomic.NewUint64(0),
 	}
 
 	ctx.resetBlock()
@@ -73,8 +73,8 @@ type Context struct {
 	printer Printer
 
 	// Global state
-	isSpeculativeContext bool
-	flushTxLock          sync.Mutex
+	transactionScopedContext bool
+	flushTxLock              sync.Mutex
 
 	// Block state
 	inBlock                   *atomic.Bool
@@ -117,8 +117,16 @@ func NewSpeculativeExecutionContext(initialAllocationInBytes int) *Context {
 	return NewContext(NewToBufferPrinter(initialAllocationInBytes), true)
 }
 
-// NewSpeculativeExecutionContextWithBuffer takes a buffer and cleans it before usage
-func NewSpeculativeExecutionContextWithBuffer(buffer *bytes.Buffer) *Context {
+// NewBlockContextWithBuffer creates a new block context with a buffer to accumulate the
+// firehose logs. This should be used when tracing a block.
+func NewBlockContextWithBuffer(buffer *bytes.Buffer) *Context {
+	return NewContext(NewToBufferPrinterWithBuffer(buffer), false)
+}
+
+// NewTransactionContextWithBuffer creates a new transaction context with a buffer to accumulate the
+// firehose logs. This should be used when tracing a standalone transaction that should later be
+// either emitted or flushed to a block context.
+func NewTransactionContextWithBuffer(buffer *bytes.Buffer) *Context {
 	return NewContext(NewToBufferPrinterWithBuffer(buffer), true)
 }
 
@@ -159,10 +167,11 @@ func (ctx *Context) RecordGenesisBlock(block *types.Block, recordGenesisAlloc fu
 	ctx.EndTransaction(&types.Receipt{PostState: root[:]})
 	ctx.FinalizeBlock(block)
 	ctx.EndBlock(block, block.Difficulty())
+	ctx.FlushBlock()
 }
 
 func (ctx *Context) StartBlock(block *types.Block) {
-	if !ctx.inBlock.CAS(false, true) {
+	if !ctx.inBlock.CompareAndSwap(false, true) {
 		panic("entering a block while already in a block scope")
 	}
 
@@ -207,7 +216,7 @@ func (ctx *Context) FlushBlock() {
 }
 
 // exitBlock is used when an abnormal condition is encountered while processing
-// transactions and we must end the block processing right away, resetting the start
+// transactions and we must end the block processing right away, resetting the state
 // along the way.
 func (ctx *Context) exitBlock() {
 	if !ctx.inBlock.Load() {
@@ -220,26 +229,6 @@ func (ctx *Context) exitBlock() {
 	ctx.resetTransaction()
 }
 
-// CancelBlock emit a Firehose CANCEL_BLOCK event that tells the console reader to discard any
-// accumulated block's data and start over. This happens on certains error conditions where the block
-// is actually invalid and will be re-processed by the chain so we should not record it.
-func (ctx *Context) CancelBlock(block *types.Block, err error) {
-	if ctx == nil {
-		return
-	}
-
-	// There is some particular runtime code path that could trigger a CANCEL_BLOCK without having started
-	// one, it's ok, the reader is resistant to such and here, we simply don't call `ExitBlock`.
-	if ctx.inBlock.Load() {
-		ctx.exitBlock()
-	}
-
-	ctx.printer.Print("CANCEL_BLOCK",
-		Uint64(block.NumberU64()),
-		err.Error(),
-	)
-}
-
 func (ctx *Context) StartSystemCall() {
 	if ctx == nil {
 		return
@@ -249,7 +238,7 @@ func (ctx *Context) StartSystemCall() {
 		panic("starting system call while not already within a block scope")
 	}
 
-	if !ctx.inTransaction.CAS(false, true) {
+	if !ctx.inTransaction.CompareAndSwap(false, true) {
 		panic("entering a system call while already in a transaction scope")
 	}
 
@@ -265,7 +254,7 @@ func (ctx *Context) EndSystemCall() {
 		panic("ending system call while not already within a block scope")
 	}
 
-	if !ctx.inTransaction.CAS(true, false) {
+	if !ctx.inTransaction.CompareAndSwap(true, false) {
 		panic("ending a system call while not in a transaction scope")
 	}
 
@@ -363,17 +352,15 @@ func (ctx *Context) StartTransactionRaw(
 	maxPriorityFeePerGas *big.Int,
 	txType uint8,
 	txIndex uint,
-	// The blob data gas used is statically computed for the transaction and there is no execution,
-	// so it's known already at transaction's start.
-	blobDataGasUsed uint64,
-	maxFeePerDataGas *big.Int,
+	blobGas uint64,
+	blobGasFeeCap *big.Int,
 	blobHashes []common.Hash,
 ) {
 	if ctx == nil {
 		return
 	}
 
-	if !ctx.inTransaction.CAS(false, true) {
+	if !ctx.inTransaction.CompareAndSwap(false, true) {
 		panic("entering a transaction while already in a transaction scope")
 	}
 
@@ -393,9 +380,9 @@ func (ctx *Context) StartTransactionRaw(
 		maxPriorityFeePerGasAsString = Hex(maxPriorityFeePerGas.Bytes())
 	}
 
-	maxFeePerDataGasAsString := "."
-	if maxFeePerDataGas != nil {
-		maxFeePerDataGasAsString = Hex(maxFeePerDataGas.Bytes())
+	blobGasFeeCapAsString := "."
+	if blobGasFeeCap != nil {
+		blobGasFeeCapAsString = Hex(blobGasFeeCap.Bytes())
 	}
 
 	blobHashesAsString := "."
@@ -407,9 +394,6 @@ func (ctx *Context) StartTransactionRaw(
 
 		blobHashesAsString = strings.Join(stringHashses, ",")
 	}
-
-	// Fork is not active yet, so let's not modify the instrumentation just yet
-	_, _, _ = blobDataGasUsed, maxFeePerDataGasAsString, blobHashesAsString
 
 	ctx.printer.Print("BEGIN_APPLY_TRX",
 		Hash(hash),
@@ -428,6 +412,9 @@ func (ctx *Context) StartTransactionRaw(
 		Uint8(txType),
 		Uint64(ctx.totalOrderingCounter.Inc()),
 		Uint(txIndex),
+		Uint64(blobGas),
+		blobGasFeeCapAsString,
+		blobHashesAsString,
 	)
 }
 
@@ -505,6 +492,8 @@ func (ctx *Context) EndTransaction(receipt *types.Receipt) {
 		Uint64(receipt.CumulativeGasUsed),
 		Hex(receipt.Bloom[:]),
 		Uint64(ctx.totalOrderingCounter.Inc()),
+		Uint64(receipt.BlobGasUsed),
+		BigInt(receipt.BlobGasPrice),
 		JSON(logItems),
 	)
 
@@ -544,7 +533,7 @@ func (ctx *Context) openCall() string {
 }
 
 func (ctx *Context) callIndex() string {
-	if !ctx.isSpeculativeContext && !ctx.inBlock.Load() {
+	if !ctx.transactionScopedContext && !ctx.inBlock.Load() {
 		debug.PrintStack()
 		panic("should have been call in a block or in speculative context, something is deeply wrong")
 	}
@@ -815,45 +804,6 @@ func (ctx *Context) RecordNonceChange(addr common.Address, oldNonce, newNonce ui
 		Uint64(oldNonce),
 		Uint64(newNonce),
 		Uint64(ctx.totalOrderingCounter.Inc()),
-	)
-}
-
-// Mempool methods
-
-func (ctx *Context) RecordTrxPool(eventType string, tx *types.Transaction, err error) {
-	if ctx == nil {
-		return
-	}
-
-	signer := types.LatestSignerForChainID(tx.ChainId())
-
-	fromAsString := "."
-	from, err := types.Sender(signer, tx)
-	if err == nil {
-		fromAsString = Addr(from)
-	}
-
-	toAsString := "."
-	if tx.To() != nil {
-		toAsString = Addr(*tx.To())
-	}
-
-	v, r, s := tx.RawSignatureValues()
-
-	//todo: handle error message
-	ctx.printer.Print(
-		eventType,
-		Hash(tx.Hash()),
-		fromAsString,
-		toAsString,
-		Hex(tx.Value().Bytes()),
-		Hex(v.Bytes()),
-		Hex(r.Bytes()),
-		Hex(s.Bytes()),
-		Uint64(tx.Gas()),
-		Hex(tx.GasPrice().Bytes()),
-		Uint64(tx.Nonce()),
-		Hex(tx.Data()),
 	)
 }
 

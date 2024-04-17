@@ -633,7 +633,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (ty
 		go func() {
 			firehoseContext := firehose.NoOpContext
 			if firehose.Enabled {
-				firehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.ParallelBlockSyncBuffer)
+				firehoseContext = firehose.NewBlockContextWithBuffer(firehose.ParallelBlockSyncBuffer)
 			}
 
 			parallelStatedb.StartPrefetcher("chain")
@@ -655,7 +655,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (ty
 
 			firehoseContext := firehose.NoOpContext
 			if firehose.Enabled {
-				firehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.BlockSyncBuffer)
+				firehoseContext = firehose.NewBlockContextWithBuffer(firehose.BlockSyncBuffer)
 			}
 
 			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx, firehoseContext)

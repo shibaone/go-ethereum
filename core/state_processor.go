@@ -80,7 +80,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	txFirehoseContext := firehoseContext
 	if txFirehoseContext.Enabled() {
-		txFirehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.TxSyncBuffer)
+		txFirehoseContext = firehose.NewTransactionContextWithBuffer(firehose.TxSyncBuffer)
 	}
 	var (
 		context = NewEVMBlockContext(header, p.bc, nil)
