@@ -134,6 +134,11 @@ func Hex(in []byte) string {
 }
 
 func BigInt(in *big.Int) string {
+	if in == nil {
+		// This returns the same as if in would have been `big.NewInt(0)`
+		return "."
+	}
+
 	return Hex(in.Bytes())
 }
 
