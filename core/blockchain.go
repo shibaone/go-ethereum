@@ -2271,7 +2271,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		firehoseContext := firehose.NoOpContext
 		if firehose.Enabled {
-			firehoseContext = firehose.NewSpeculativeExecutionContextWithBuffer(firehose.BlockSyncBuffer)
+			firehoseContext = firehose.NewBlockContextWithBuffer(firehose.BlockSyncBuffer)
 		}
 
 		statedb, receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, firehoseContext)
