@@ -149,6 +149,8 @@ var stateTransitionCommand = &cli.Command{
 		t8ntool.TraceFlag,
 		t8ntool.TraceTracerFlag,
 		t8ntool.TraceTracerConfigFlag,
+		t8ntool.TraceTracerFlag,
+		t8ntool.TraceTracerConfigFlag,
 		t8ntool.TraceEnableMemoryFlag,
 		t8ntool.TraceDisableStackFlag,
 		t8ntool.TraceEnableReturnDataFlag,

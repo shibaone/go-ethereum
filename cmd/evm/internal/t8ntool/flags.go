@@ -38,6 +38,11 @@ var (
 		Name:  "trace.jsonconfig",
 		Usage: "The configurations for the custom tracer specified by --trace.tracer. If provided, must be in JSON format",
 	}
+	TraceDisableMemoryFlag = &cli.BoolFlag{
+		Name:  "trace.nomemory",
+		Value: true,
+		Usage: "Disable full memory dump in traces (deprecated)",
+	}
 	TraceEnableMemoryFlag = &cli.BoolFlag{
 		Name:  "trace.memory",
 		Usage: "Enable full memory dump in traces",
