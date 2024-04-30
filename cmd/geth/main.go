@@ -105,6 +105,7 @@ var (
 		utils.TransactionHistoryFlag,
 		utils.StateHistoryFlag,
 		utils.PathDBSyncFlag,
+		utils.JournalFileFlag,
 		utils.LightServeFlag,       // deprecated
 		utils.LightIngressFlag,     // deprecated
 		utils.LightEgressFlag,      // deprecated
@@ -146,6 +147,7 @@ var (
 		// utils.MinerNewPayloadTimeout,
 		utils.NATFlag,
 		utils.NoDiscoverFlag,
+		utils.PeerFilterPatternsFlag,
 		utils.DiscoveryV4Flag,
 		utils.DiscoveryV5Flag,
 		utils.InstanceFlag,
