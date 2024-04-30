@@ -884,6 +884,10 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 			for addr, account := range allocs {
 				log.Info("change contract code", "address", addr)
 				state.SetCode(addr, account.Code, firehoseContext)
+
+				if state.GetBalance(addr).Cmp(big.NewInt(0)) == 0 {
+					state.SetBalance(addr, account.Balance, firehoseContext, firehose.BalanceChangeReason("genesis_balance"))
+				}
 			}
 		}
 	}
