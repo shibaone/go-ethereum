@@ -616,6 +616,26 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 		return cmp.Compare(i.Index, j.Index)
 	})
 
+	if len(f.transaction.Calls) == 0 &&
+		receipt.Status == types.ReceiptStatusFailed &&
+		f.transaction.Type == pbeth.TransactionTrace_TRX_TYPE_OPTIMISM_DEPOSIT {
+		f.transaction.Calls = append(f.transaction.Calls, &pbeth.Call{
+			CallType:       pbeth.CallType_CALL,
+			Caller:         f.transaction.From,
+			Address:        f.transaction.To,
+			Value:          f.transaction.Value,
+			GasLimit:       f.transaction.GasLimit,
+			GasConsumed:    receipt.GasUsed,
+			Input:          f.transaction.Input,
+			StatusFailed:   true,
+			StatusReverted: true,
+			FailureReason:  "failed deposit transaction",
+			StateReverted:  true,
+			BeginOrdinal:   f.blockOrdinal.Next(),
+			EndOrdinal:     f.blockOrdinal.Next(),
+		})
+	}
+
 	rootCall := f.transaction.Calls[0]
 
 	if !f.deferredCallState.IsEmpty() {
@@ -1616,6 +1636,8 @@ func transactionTypeFromChainTxType(txType uint8) pbeth.TransactionTrace_Type {
 		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
 	case types.BlobTxType:
 		return pbeth.TransactionTrace_TRX_TYPE_BLOB
+	case types.DepositTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_OPTIMISM_DEPOSIT
 	default:
 		panic(fmt.Errorf("unknown transaction type %d", txType))
 	}
@@ -1797,7 +1819,7 @@ func maxFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 	case types.LegacyTxType, types.AccessListTxType:
 		return nil
 
-	case types.DynamicFeeTxType, types.BlobTxType:
+	case types.DynamicFeeTxType, types.BlobTxType, types.DepositTxType:
 		return firehoseBigIntFromNative(tx.GasFeeCap())
 
 	}
@@ -1810,7 +1832,7 @@ func maxPriorityFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 	case types.LegacyTxType, types.AccessListTxType:
 		return nil
 
-	case types.DynamicFeeTxType, types.BlobTxType:
+	case types.DynamicFeeTxType, types.BlobTxType, types.DepositTxType:
 		return firehoseBigIntFromNative(tx.GasTipCap())
 	}
 
@@ -1822,7 +1844,7 @@ func gasPrice(tx *types.Transaction, baseFee *big.Int) *pbeth.BigInt {
 	case types.LegacyTxType, types.AccessListTxType:
 		return firehoseBigIntFromNative(tx.GasPrice())
 
-	case types.DynamicFeeTxType, types.BlobTxType:
+	case types.DynamicFeeTxType, types.BlobTxType, types.DepositTxType:
 		if baseFee == nil {
 			return firehoseBigIntFromNative(tx.GasPrice())
 		}

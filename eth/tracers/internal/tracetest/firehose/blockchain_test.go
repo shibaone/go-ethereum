@@ -1,8 +1,10 @@
 package firehose_test
 
 import (
+	"fmt"
 	"hash"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -15,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,8 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 	prestate := readPrestateData(t, prestatePath)
 
 	tx := new(types.Transaction)
-	require.NoError(t, rlp.DecodeBytes(common.FromHex(prestate.Input), tx))
+	require.NoError(t, tx.UnmarshalBinary(common.FromHex(prestate.Input)))
+	fmt.Println("tx", tx.Hash().String())
 
 	context := prestate.Context.toBlockContext(prestate.Genesis)
 
@@ -85,8 +87,8 @@ func newBlockchain(t *testing.T, alloc types.GenesisAlloc, context vm.BlockConte
 		Alloc:      alloc,
 	}
 
-	log.Root().SetHandler(log.StdoutHandler)
-	defer log.Root().SetHandler(log.DiscardHandler())
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, false)))
+	defer log.SetDefault(log.NewLogger(log.DiscardHandler()))
 
 	blockchain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), core.DefaultCacheConfigWithScheme(rawdb.HashScheme), genesis, nil, ethash.NewFullFaker(), vm.Config{
 		Tracer: tracer,

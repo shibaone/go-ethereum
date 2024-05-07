@@ -29,7 +29,7 @@ func TestFirehoseChain(t *testing.T) {
 	}
 
 	tracer, err := tracers.NewFirehoseFromRawJSON(json.RawMessage(`{
-		"applyBackwardsCompatibility": true,
+		"applyBackwardsCompatibility": false,
 		"_private": {
 			"flushToTestBuffer": true,
 			"ignoreGenesisBlock": true
@@ -71,6 +71,7 @@ func TestFirehoseChain(t *testing.T) {
 func TestFirehosePrestate(t *testing.T) {
 	testFolders := []string{
 		"./testdata/TestFirehosePrestate/keccak256_too_few_memory_bytes_get_padded",
+		"./testdata/TestFirehosePrestate/failed_deposit",
 	}
 
 	for _, folder := range testFolders {
@@ -78,7 +79,7 @@ func TestFirehosePrestate(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			tracer, err := tracers.NewFirehoseFromRawJSON(json.RawMessage(`{
-				"applyBackwardsCompatibility": true,
+				"applyBackwardsCompatibility": false,
 				"_private": {
 					"flushToTestBuffer": true
 				}
