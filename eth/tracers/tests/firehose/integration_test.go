@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -33,25 +32,6 @@ import (
 )
 
 func TestFirehoseIntegrationTest(t *testing.T) {
-	key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-	from := crypto.PubkeyToAddress(key.PublicKey)
-	gas := uint64(1000000) // 1M gas
-	to := common.HexToAddress("0x00000000000000000000000000000000deadbeef")
-	signer := types.LatestSignerForChainID(big.NewInt(1337))
-	tx, err := types.SignNewTx(key, signer,
-		&types.LegacyTx{
-			Nonce:    1,
-			GasPrice: big.NewInt(500),
-			Gas:      gas,
-			To:       &to,
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
-	txContext := vm.TxContext{
-		Origin:   from,
-		GasPrice: tx.GasPrice(),
-	}
 	context := vm.BlockContext{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,

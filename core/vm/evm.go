@@ -191,7 +191,7 @@ func (evm *EVM) Interpreter() *EVMInterpreter {
 func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas uint64, value *uint256.Int) (ret []byte, leftOverGas uint64, err error) {
 	// Capture the tracer start/end events in debug mode
 	if evm.Config.Tracer != nil {
-		evm.captureBegin(evm.depth, CALL, caller.Address(), addr, input, gas, value)
+		evm.captureBegin(evm.depth, CALL, caller.Address(), addr, input, gas, value.ToBig())
 		defer func(startGas uint64) {
 			evm.captureEnd(evm.depth, startGas, leftOverGas, ret, err)
 		}(gas)
@@ -243,7 +243,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			if evm.Config.Tracer != nil && evm.Config.Tracer.OnGasChange != nil {
 				evm.Config.Tracer.OnGasChange(gas, 0, tracing.GasChangeCallFailedExecution)
 			}
-
 			gas = 0
 		}
 		// TODO: consider clearing up unused snapshots:
@@ -263,7 +262,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, gas uint64, value *uint256.Int) (ret []byte, leftOverGas uint64, err error) {
 	// Invoke tracer hooks that signal entering/exiting a call frame
 	if evm.Config.Tracer != nil {
-		evm.captureBegin(evm.depth, CALLCODE, caller.Address(), addr, input, gas, value)
+		evm.captureBegin(evm.depth, CALLCODE, caller.Address(), addr, input, gas, value.ToBig())
 		defer func(startGas uint64) {
 			evm.captureEnd(evm.depth, startGas, leftOverGas, ret, err)
 		}(gas)
@@ -299,7 +298,6 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 			if evm.Config.Tracer != nil && evm.Config.Tracer.OnGasChange != nil {
 				evm.Config.Tracer.OnGasChange(gas, 0, tracing.GasChangeCallFailedExecution)
 			}
-
 			gas = 0
 		}
 	}
@@ -379,7 +377,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
 	// but is the correct thing to do and matters on other networks, in tests, and potential
 	// future scenarios
-	evm.StateDB.AddBalance(addr, new(big.Int), tracing.BalanceChangeTouchAccount)
+	evm.StateDB.AddBalance(addr, new(uint256.Int), tracing.BalanceChangeTouchAccount)
 
 	if p, isPrecompile := evm.precompile(addr); isPrecompile {
 		ret, gas, err = RunPrecompiledContract(p, input, gas, evm.Config.Tracer)
@@ -426,7 +424,7 @@ func (c *codeAndHash) Hash() common.Hash {
 // create creates a new contract using code as deployment code.
 func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *uint256.Int, address common.Address, typ OpCode) (ret []byte, createAddress common.Address, leftOverGas uint64, err error) {
 	if evm.Config.Tracer != nil {
-		evm.captureBegin(evm.depth, typ, caller.Address(), address, codeAndHash.code, gas, value)
+		evm.captureBegin(evm.depth, typ, caller.Address(), address, codeAndHash.code, gas, value.ToBig())
 		defer func(startGas uint64) {
 			evm.captureEnd(evm.depth, startGas, leftOverGas, ret, err)
 		}(gas)

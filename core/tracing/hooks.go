@@ -38,7 +38,7 @@ type OpContext interface {
 
 // StateDB gives tracers access to the whole state.
 type StateDB interface {
-	GetBalance(common.Address) *big.Int
+	GetBalance(common.Address) *uint256.Int
 	GetNonce(common.Address) uint64
 	GetCode(common.Address) []byte
 	GetState(common.Address, common.Hash) common.Hash
@@ -223,6 +223,8 @@ const (
 	// account within the same tx (captured at end of tx).
 	// Note it doesn't account for a self-destruct which appoints itself as recipient.
 	BalanceDecreaseSelfdestructBurn BalanceChangeReason = 14
+
+	BalanceIncreaseMint BalanceChangeReason = 15
 )
 
 // GasChangeReason is used to indicate the reason for a gas change, useful

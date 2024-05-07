@@ -82,12 +82,8 @@ type input struct {
 }
 
 func Transition(ctx *cli.Context) error {
-	// Configure the go-ethereum logger
-	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
-	glogger.Verbosity(log.Lvl(ctx.Int(VerbosityFlag.Name)))
-	log.Root().SetHandler(glogger)
-
 	var getTracer = func(txIndex int, txHash common.Hash) (*tracers.Tracer, io.WriteCloser, error) { return nil, nil, nil }
+
 	baseDir, err := createBasedir(ctx)
 	if err != nil {
 		return NewError(ErrorIO, fmt.Errorf("failed creating output basedir: %v", err))

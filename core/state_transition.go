@@ -414,7 +414,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("mint value exceeds uint256: %d", mintU256)
 		}
-		st.state.AddBalance(st.msg.From, mintU256)
+		st.state.AddBalance(st.msg.From, mintU256, tracing.BalanceIncreaseMint)
 	}
 	snap := st.state.Snapshot()
 
@@ -569,13 +569,13 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("optimism gas cost overflows U256: %d", gasCost)
 		}
-		st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256)
+		st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256, tracing.BalanceIncreaseRewardTransactionFee)
 		if l1Cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); l1Cost != nil {
 			amtU256, overflow = uint256.FromBig(l1Cost)
 			if overflow {
 				return nil, fmt.Errorf("optimism l1 cost overflows U256: %d", l1Cost)
 			}
-			st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256)
+			st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256, tracing.BalanceIncreaseRewardTransactionFee)
 		}
 	}
 

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"math/big"
 	"strings"
 
@@ -39,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/holiman/uint256"
 )
 
@@ -124,44 +124,7 @@ func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 }
 
 // hashAlloc computes the state root according to the genesis specification.
-func hashAlloc(ga *types.GenesisAlloc) (common.Hash, error) {
-	// Create an ephemeral in-memory database for computing hash,
-	// all the derived states will be discarded to not pollute disk.
-	db := state.NewDatabase(rawdb.NewMemoryDatabase())
-	statedb, err := state.New(types.EmptyRootHash, db, nil)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	for addr, account := range *ga {
-		if account.Balance != nil {
-			statedb.AddBalance(addr, account.Balance, tracing.BalanceIncreaseGenesisBalance)
-		}
-		statedb.SetCode(addr, account.Code)
-		statedb.SetNonce(addr, account.Nonce)
-		for key, value := range account.Storage {
-			statedb.SetState(addr, key, value)
-		}
-	}
-	return statedb.Commit(0, false)
-}
-
-// GenesisAlloc specifies the initial state that is part of the genesis block.
-type GenesisAlloc map[common.Address]GenesisAccount
-
-func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
-	m := make(map[common.UnprefixedAddress]GenesisAccount)
-	if err := json.Unmarshal(data, &m); err != nil {
-		return err
-	}
-	*ga = make(GenesisAlloc)
-	for addr, a := range m {
-		(*ga)[common.Address(addr)] = a
-	}
-	return nil
-}
-
-// hash computes the state root according to the genesis specification.
-func (ga *GenesisAlloc) hash(isVerkle bool) (common.Hash, error) {
+func hashAlloc(ga *types.GenesisAlloc, isVerkle bool) (common.Hash, error) {
 	// If a genesis-time verkle trie is requested, create a trie config
 	// with the verkle trie enabled so that the tree can be initialized
 	// as such.
@@ -172,6 +135,7 @@ func (ga *GenesisAlloc) hash(isVerkle bool) (common.Hash, error) {
 			IsVerkle: true,
 		}
 	}
+
 	// Create an ephemeral in-memory database for computing hash,
 	// all the derived states will be discarded to not pollute disk.
 	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), config)
@@ -181,7 +145,7 @@ func (ga *GenesisAlloc) hash(isVerkle bool) (common.Hash, error) {
 	}
 	for addr, account := range *ga {
 		if account.Balance != nil {
-			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance, tracing.BalanceIncreaseGenesisBalance))
+			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance), tracing.BalanceIncreaseGenesisBalance)
 		}
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
@@ -204,7 +168,7 @@ func flushAlloc(ga *types.GenesisAlloc, db ethdb.Database, triedb *trie.Database
 		if account.Balance != nil {
 			// This is not actually logged via tracer because OnGenesisBlock
 			// already captures the allocations.
-			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance, tracing.BalanceIncreaseGenesisBalance))
+			statedb.AddBalance(addr, uint256.MustFromBig(account.Balance), tracing.BalanceIncreaseGenesisBalance)
 		}
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
@@ -512,10 +476,18 @@ func (g *Genesis) IsVerkle() bool {
 
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	root, err := hashAlloc(&g.Alloc)
-	if err != nil {
+	var root common.Hash
+	var err error
+	if g.StateHash != nil {
+		if len(g.Alloc) > 0 {
+			panic(fmt.Errorf("cannot both have genesis hash %s "+
+				"and non-empty state-allocation", *g.StateHash))
+		}
+		root = *g.StateHash
+	} else if root, err = hashAlloc(&g.Alloc, g.IsVerkle()); err != nil {
 		panic(err)
 	}
+
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
 		Nonce:      types.EncodeNonce(g.Nonce),

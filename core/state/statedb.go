@@ -19,6 +19,7 @@ package state
 
 import (
 	"fmt"
+	"math/big"
 	"sort"
 	"time"
 
@@ -459,7 +460,7 @@ func (s *StateDB) SelfDestruct(addr common.Address) {
 	}
 	var (
 		prev = stateObject.Balance()
-		n    = new(big.Int)
+		n    = new(uint256.Int)
 	)
 	s.journal.append(selfDestructChange{
 		account:     &addr,
@@ -467,7 +468,7 @@ func (s *StateDB) SelfDestruct(addr common.Address) {
 		prevbalance: new(uint256.Int).Set(stateObject.Balance()),
 	})
 	if s.logger != nil && s.logger.OnBalanceChange != nil && prev.Sign() > 0 {
-		s.logger.OnBalanceChange(addr, prev, n, tracing.BalanceDecreaseSelfdestruct)
+		s.logger.OnBalanceChange(addr, prev.ToBig(), n.ToBig(), tracing.BalanceDecreaseSelfdestruct)
 	}
 	stateObject.markSelfdestructed()
 	stateObject.data.Balance = new(uint256.Int)
@@ -856,7 +857,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 
 			// If ether was sent to account post-selfdestruct it is burnt.
 			if bal := obj.Balance(); s.logger != nil && s.logger.OnBalanceChange != nil && obj.selfDestructed && bal.Sign() != 0 {
-				s.logger.OnBalanceChange(obj.address, bal, new(big.Int), tracing.BalanceDecreaseSelfdestructBurn)
+				s.logger.OnBalanceChange(obj.address, bal.ToBig(), new(big.Int), tracing.BalanceDecreaseSelfdestructBurn)
 			}
 			// We need to maintain account deletions explicitly (will remain
 			// set indefinitely). Note only the first occurred self-destruct

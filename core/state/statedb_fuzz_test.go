@@ -61,7 +61,7 @@ func newStateTestAction(addr common.Address, r *rand.Rand, index int) testAction
 		{
 			name: "SetBalance",
 			fn: func(a testAction, s *StateDB) {
-				s.SetBalance(addr, uint256.NewInt(uint64(a.args[0]), tracing.BalanceChangeUnspecified))
+				s.SetBalance(addr, uint256.NewInt(uint64(a.args[0])), tracing.BalanceChangeUnspecified)
 			},
 			args: make([]int64, 1),
 		},

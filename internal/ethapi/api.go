@@ -1064,7 +1064,7 @@ func (diff *StateOverride) Apply(statedb *state.StateDB) error {
 		// Override account balance.
 		if account.Balance != nil {
 			u256Balance, _ := uint256.FromBig((*big.Int)(*account.Balance))
-			state.SetBalance(addr, u256Balance, tracing.BalanceChangeUnspecified)
+			statedb.SetBalance(addr, u256Balance, tracing.BalanceChangeUnspecified)
 		}
 		if account.State != nil && account.StateDiff != nil {
 			return fmt.Errorf("account %s has both 'state' and 'stateDiff'", addr.Hex())

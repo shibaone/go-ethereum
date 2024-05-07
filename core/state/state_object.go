@@ -436,7 +436,7 @@ func (s *stateObject) SetBalance(amount *uint256.Int, reason tracing.BalanceChan
 		prev:    new(uint256.Int).Set(s.data.Balance),
 	})
 	if s.db.logger != nil && s.db.logger.OnBalanceChange != nil {
-		s.db.logger.OnBalanceChange(s.address, s.Balance(), amount, reason)
+		s.db.logger.OnBalanceChange(s.address, s.Balance().ToBig(), amount.ToBig(), reason)
 	}
 	s.setBalance(amount)
 }

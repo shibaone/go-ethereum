@@ -78,7 +78,7 @@ func (ctx *ScopeContext) Address() common.Address {
 
 // CallValue returns the value supplied with this call.
 func (ctx *ScopeContext) CallValue() *big.Int {
-	return ctx.Contract.Value()
+	return ctx.Contract.Value().ToBig()
 }
 
 // CallInput returns the input/calldata with this call. Callers must not modify

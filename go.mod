@@ -5,7 +5,6 @@ go 1.21
 toolchain go1.21.6
 
 require (
-	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0
 	github.com/Microsoft/go-winio v0.6.1
 	github.com/VictoriaMetrics/fastcache v1.12.1
@@ -63,6 +62,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/supranational/blst v0.3.11
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
+	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.25.7
 	go.uber.org/automaxprocs v1.5.2
 	golang.org/x/crypto v0.18.0

@@ -122,7 +122,7 @@ type rejectedTx struct {
 // Apply applies a set of transactions to a pre-state
 func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	txIt txIterator, miningReward int64,
-	getTracerFn func(txIndex int, txHash common.Hash) (*tracers.Tracer, error)) (*state.StateDB, *ExecutionResult, []byte, error) {
+	getTracerFn func(txIndex int, txHash common.Hash) (*tracers.Tracer, io.WriteCloser, error)) (*state.StateDB, *ExecutionResult, []byte, error) {
 	// Capture errors for BLOCKHASH operation, if we haven't been supplied the
 	// required blockhashes
 	var hashError error
@@ -332,15 +332,15 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			reward.Sub(reward, new(big.Int).SetUint64(ommer.Delta))
 			reward.Mul(reward, blockReward)
 			reward.Div(reward, big.NewInt(8))
-			statedb.AddBalance(ommer.Address, uint256.MustFromBig(reward, tracing.BalanceIncreaseRewardMineUncle))
+			statedb.AddBalance(ommer.Address, uint256.MustFromBig(reward), tracing.BalanceIncreaseRewardMineUncle)
 		}
-		statedb.AddBalance(pre.Env.Coinbase, uint256.MustFromBig(minerReward, tracing.BalanceIncreaseRewardMineBlock))
+		statedb.AddBalance(pre.Env.Coinbase, uint256.MustFromBig(minerReward), tracing.BalanceIncreaseRewardMineBlock)
 	}
 	// Apply withdrawals
 	for _, w := range pre.Env.Withdrawals {
 		// Amount is in gwei, turn into wei
 		amount := new(big.Int).Mul(new(big.Int).SetUint64(w.Amount), big.NewInt(params.GWei))
-		statedb.AddBalance(w.Address, uint256.MustFromBig(amount, tracing.BalanceIncreaseWithdrawal))
+		statedb.AddBalance(w.Address, uint256.MustFromBig(amount), tracing.BalanceIncreaseWithdrawal)
 	}
 	// Commit block
 	root, err := statedb.Commit(vmContext.BlockNumber.Uint64(), chainConfig.IsEIP158(vmContext.BlockNumber))
@@ -383,7 +383,7 @@ func MakePreState(db ethdb.Database, accounts core.GenesisAlloc) *state.StateDB 
 	for addr, a := range accounts {
 		statedb.SetCode(addr, a.Code)
 		statedb.SetNonce(addr, a.Nonce)
-		statedb.SetBalance(addr, uint256.MustFromBig(a.Balance, tracing.BalanceIncreaseGenesisBalance))
+		statedb.SetBalance(addr, uint256.MustFromBig(a.Balance), tracing.BalanceIncreaseGenesisBalance)
 		for k, v := range a.Storage {
 			statedb.SetState(addr, k, v)
 		}

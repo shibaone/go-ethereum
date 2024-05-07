@@ -19,6 +19,7 @@ package native
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 
@@ -125,6 +126,7 @@ func newCallTracer(ctx *tracers.Context, cfg json.RawMessage) (*tracers.Tracer, 
 	if err != nil {
 		return nil, err
 	}
+
 	return &tracers.Tracer{
 		Hooks: &tracing.Hooks{
 			OnTxStart: t.OnTxStart,
@@ -219,6 +221,20 @@ func (t *callTracer) OnTxEnd(receipt *types.Receipt, err error) {
 	// Error happened during tx validation.
 	if err != nil {
 		return
+	}
+
+	if len(t.callstack) == 0 {
+		if receipt.Status == types.ReceiptStatusFailed {
+			t.callstack = append(t.callstack, callFrame{
+				Type:  vm.STOP,
+				Error: "failed deposit transaction",
+			})
+		}
+	}
+
+	if len(t.callstack) == 0 {
+		//return
+		panic(fmt.Sprintf("callstack empty %p, %d", t, receipt.GasUsed))
 	}
 	t.callstack[0].GasUsed = receipt.GasUsed
 	if t.config.WithLog {

@@ -311,7 +311,7 @@ func TestStateChangeDuringReset(t *testing.T) {
 
 func testAddBalance(pool *LegacyPool, addr common.Address, amount *big.Int) {
 	pool.mu.Lock()
-	pool.currentState.AddBalance(addr, uint256.MustFromBig(amount, tracing.BalanceChangeUnspecified))
+	pool.currentState.AddBalance(addr, uint256.MustFromBig(amount), tracing.BalanceChangeUnspecified)
 	pool.mu.Unlock()
 }
 

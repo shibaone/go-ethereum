@@ -237,11 +237,8 @@ func newJsTracer(code string, ctx *tracers.Context, cfg json.RawMessage) (*trace
 
 // OnTxStart implements the Tracer interface and is invoked at the beginning of
 // transaction processing.
+
 func (t *jsTracer) OnTxStart(env *tracing.VMContext, tx *types.Transaction, from common.Address) {
-	cancel := func(err error) {
-		t.err = err
-		t.env.Cancel()
-	}
 	t.env = env
 	// Need statedb access for db object
 	db := &dbObj{db: env.StateDB, vm: t.vm, toBig: t.toBig, toBuf: t.toBuf, fromBuf: t.fromBuf}

@@ -1730,6 +1730,7 @@ var balanceChangeReasonToPb = map[tracing.BalanceChangeReason]pbeth.BalanceChang
 	tracing.BalanceDecreaseSelfdestruct:         pbeth.BalanceChange_REASON_SUICIDE_WITHDRAW,
 	tracing.BalanceDecreaseSelfdestructBurn:     pbeth.BalanceChange_REASON_BURN,
 	tracing.BalanceIncreaseWithdrawal:           pbeth.BalanceChange_REASON_WITHDRAWAL,
+	tracing.BalanceIncreaseMint:                 pbeth.BalanceChange_REASON_INCREASE_MINT,
 
 	tracing.BalanceChangeUnspecified: pbeth.BalanceChange_REASON_UNKNOWN,
 }
@@ -2138,6 +2139,7 @@ func staticFirehoseChainValidationOnInit() {
 		types.AccessListTxType: true,
 		types.DynamicFeeTxType: true,
 		types.BlobTxType:       true,
+		types.DepositTxType:    true,
 	}
 
 	for txType := byte(0); txType < 255; txType++ {
