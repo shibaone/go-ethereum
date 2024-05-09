@@ -58,7 +58,7 @@ jobs:
           tags: |
             type=ref,event=tag,priority=1000
             type=ref,event=branch,priority=1000
-            type=match,pattern=^(.*)-v\d+.\d+.\d+-fh,group=1,suffix=-latest-fh2
+            type=match,pattern=^(.*)-v\d+.\d+.\d+-fh,group=1,suffix=-latest-fh3
           flavor: |
             latest=false
 
