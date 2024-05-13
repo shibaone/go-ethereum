@@ -1,11 +1,11 @@
 FROM ubuntu:20.04
-FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985 as op-node
+FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985 as optimism-node
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
       apt-get -y install -y ca-certificates libssl1.1
 
 ADD ./geth /app/geth
 ADD ./geth /usr/local/bin/geth
-COPY --from=op-node /usr/local/bin/op-node /app/op-node
+COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
 
 ENTRYPOINT /app/geth
