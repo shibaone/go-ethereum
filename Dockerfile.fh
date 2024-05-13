@@ -12,15 +12,15 @@ RUN cd /go-ethereum && go mod download
 
 ADD . /go-ethereum
 RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
-ADD ./geth /app/geth
-ADD ./geth /usr/local/bin/geth
 
 
 # Pull Geth into a second stage deploy alpine container
 FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates
+
 COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
+COPY --from=builder /go-ethereum/build/bin/geth /app/geth
 
 COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
 
