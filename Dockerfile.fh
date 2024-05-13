@@ -1,11 +1,27 @@
-FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985 as optimism-node
-FROM alpine:3.19.1
+# Build Geth in a stock Go builder container
+FROM golang:1.22-alpine as builder
 
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
-      apt-get -y install -y ca-certificates libssl1.1
+RUN apk add --no-cache gcc musl-dev linux-headers git
 
+# Get dependencies - will also be cached if we won't change go.mod/go.sum
+COPY go.mod /go-ethereum/
+COPY go.sum /go-ethereum/
+RUN cd /go-ethereum && go mod download
+
+ADD . /go-ethereum
+RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
 ADD ./geth /app/geth
 ADD ./geth /usr/local/bin/geth
-COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
+
+
+# Pull Geth into a second stage deploy alpine container
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
+
+FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985
+
+COPY /usr/local/bin/op-node /app/op-node
 
 ENTRYPOINT /app/geth
