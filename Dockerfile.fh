@@ -1,5 +1,5 @@
 FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985 as optimism-node
-FROM ubuntu:20.04
+FROM alpine:3.19.1
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
       apt-get -y install -y ca-certificates libssl1.1

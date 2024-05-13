@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: ubuntu-20.04
+    runs-on: alpine-3.19.1
     permissions:
       contents: read
       packages: write
