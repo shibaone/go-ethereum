@@ -34,11 +34,10 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 
 	context := prestate.Context.toBlockContext(prestate.Genesis)
 
-	triedb, _, stateDB := tests.MakePreState(rawdb.NewMemoryDatabase(), prestate.Genesis.Alloc, false, rawdb.HashScheme)
-	defer triedb.Close()
+	state := tests.MakePreState(rawdb.NewMemoryDatabase(), prestate.Genesis.Alloc, false, rawdb.HashScheme)
 
-	stateDB.SetLogger(hooks)
-	stateDB.SetTxContext(tx.Hash(), 0)
+	state.StateDB.SetLogger(hooks)
+	state.StateDB.SetTxContext(tx.Hash(), 0)
 
 	block := types.NewBlock(&types.Header{
 		ParentHash:       prestate.Genesis.ToBlock().Hash(),
@@ -63,7 +62,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 		prestate,
 		&context.Coinbase,
 		new(core.GasPool).AddGas(block.GasLimit()),
-		stateDB,
+		state.StateDB,
 		block.Header(),
 		tx,
 		&usedGas,
