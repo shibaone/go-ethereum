@@ -1,3 +1,5 @@
+FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985 as optimism-node
+
 # Build Geth in a stock Go builder container
 FROM golang:1.22-alpine as builder
 
@@ -20,8 +22,6 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
 
-FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:e87e5ef2b96893eb8b446da420f7ba7f3e3c5985
-
-COPY /usr/local/bin/op-node /app/op-node
+COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
 
 ENTRYPOINT /app/geth
