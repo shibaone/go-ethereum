@@ -97,12 +97,14 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		OnOpcode:  tracer.OnOpcode,
 		OnFault:   tracer.OnOpcodeFault,
 
-		OnBalanceChange: tracer.OnBalanceChange,
-		OnNonceChange:   tracer.OnNonceChange,
-		OnCodeChange:    tracer.OnCodeChange,
-		OnStorageChange: tracer.OnStorageChange,
-		OnGasChange:     tracer.OnGasChange,
-		OnLog:           tracer.OnLog,
+		OnBalanceChange:   tracer.OnBalanceChange,
+		OnNonceChange:     tracer.OnNonceChange,
+		OnCodeChange:      tracer.OnCodeChange,
+		OnStorageChange:   tracer.OnStorageChange,
+		OnGasChange:       tracer.OnGasChange,
+		OnLog:             tracer.OnLog,
+		OnSystemCallStart: tracer.OnBeaconBlockRootStart,
+		OnSystemCallEnd:   tracer.OnBeaconBlockRootEnd,
 
 		// This should actually be conditional but it's not possible to do it in the hooks
 		// directly because the chain ID will be known only after the `OnBlockchainInit` call.
@@ -514,7 +516,7 @@ func (f *Firehose) reorderCallOrdinals(call *pbeth.Call, ordinalBase uint64) (or
 	return call.EndOrdinal
 }
 
-func (f *Firehose) OnBeaconBlockRootStart(root common.Hash) {
+func (f *Firehose) OnBeaconBlockRootStart() {
 	firehoseInfo("system call start (for=%s)", "beacon_block_root")
 	f.ensureInBlockAndNotInTrx()
 
