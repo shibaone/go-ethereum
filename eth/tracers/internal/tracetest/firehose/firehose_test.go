@@ -72,6 +72,7 @@ func TestFirehosePrestate(t *testing.T) {
 	testFolders := []string{
 		"./testdata/TestFirehosePrestate/keccak256_too_few_memory_bytes_get_padded",
 		"./testdata/TestFirehosePrestate/failed_deposit",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check",
 	}
 
 	for _, folder := range testFolders {
