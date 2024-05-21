@@ -2172,8 +2172,10 @@ func (s *FinalityStatus) Reset() {
 	s.LastIrreversibleBlockHash = nil
 }
 
+var EmptyHash = bytes.Repeat([]byte{0}, common.HashLength)
+
 func (s *FinalityStatus) IsEmpty() bool {
-	return s.LastIrreversibleBlockNumber == 0 && len(s.LastIrreversibleBlockHash) == 0
+	return s.LastIrreversibleBlockNumber == 0 && (len(s.LastIrreversibleBlockHash) == 0) || bytes.Equal(s.LastIrreversibleBlockHash, EmptyHash)
 }
 
 var errFirehoseUnknownType = errors.New("firehose unknown tx type")
