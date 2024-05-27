@@ -589,7 +589,7 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 
 	trxTrace := f.completeTransaction(receipt)
 
-	if receipt.DepositReceiptVersion != nil {
+	if receipt.DepositNonce != nil && trxTrace.Type == types.DepositTxType {
 		trxTrace.Nonce = *receipt.DepositNonce
 	}
 

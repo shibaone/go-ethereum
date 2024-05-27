@@ -19,29 +19,49 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// Currently only supports op-based blockchains
 var configByName = map[string]*params.ChainConfig{
-	"mainnet":    params.MainnetChainConfig,
-	"goerli":     params.GoerliChainConfig,
-	"sepolia":    params.SepoliaChainConfig,
-	"holesky":    params.HoleskyChainConfig,
-	"optMainnet": nil,
+	"optMainnet":  nil,
+	"baseMainnet": nil,
+}
+
+// Currently only supports op-based blockchains
+var networkToChainID = map[string]uint64{
+	"optMainnet":  params.OPMainnetChainID,
+	"baseMainnet": params.BaseMainnetChainID,
 }
 
 func main() {
-	optMainnetConfig, err := params.LoadOPStackChainConfig(params.OPMainnetChainID)
-	noError(err, "Failed to load OPStack mainnet chain config")
-	configByName["optMainnet"] = optMainnetConfig
+	args := os.Args
+
+	if len(args) < 2 {
+		fmt.Println("Usage: generate-prestate <network> <tx-hash>")
+		return
+	}
+
+	networkArg := args[1]
+	netorkChainId, ok := networkToChainID[networkArg]
+	if !ok {
+		fmt.Printf("Unknown network %q, valid networks are %q\n", networkArg, strings.Join(maps.Keys(configByName), ", "))
+		return
+	}
+	txHashArg := args[2]
+	log("network chain ID", netorkChainId)
+
+	mainnetConfig, err := params.LoadOPStackChainConfig(netorkChainId)
+	noError(err, "Failed to load mainnet chain config")
+	configByName[networkArg] = mainnetConfig
 
 	ensure(len(os.Args) == 3, "Usage: generate-prestate <network> <tx-hash>")
 
-	config, found := configByName[os.Args[1]]
-	ensure(found, "Unknown network %q, valid networks are %q", os.Args[1], strings.Join(maps.Keys(configByName), ", "))
+	config, found := configByName[networkArg]
+	ensure(found, "Unknown network %q, valid networks are %q", networkArg, strings.Join(maps.Keys(configByName), ", "))
 
 	endpoint := os.Getenv("ARCHIVE_ENDPOINT")
 	ensure(endpoint != "", "ARCHIVE_ENDPOINT environment variable is not set")
 
-	txHash := common.HexToHash(os.Args[2])
-	ensure(txHash.Big().Sign() != 0, "Argument %q is not a valid transaction hash", os.Args[1])
+	txHash := common.HexToHash(txHashArg)
+	ensure(txHash.Big().Sign() != 0, "Argument %q is not a valid transaction hash", networkArg)
 
 	client, err := rpc.DialOptions(context.Background(), endpoint)
 	noError(err, "Failed to connect to RPC server")

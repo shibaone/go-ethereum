@@ -124,8 +124,8 @@ var pbFieldNameToGethMapping = map[string]string{
 }
 
 var (
-	pbHeaderType   = reflect.TypeFor[pbeth.BlockHeader]()
-	gethHeaderType = reflect.TypeFor[types.Header]()
+	pbHeaderType   = reflect.TypeOf((*pbeth.BlockHeader)(nil)).Elem()
+	gethHeaderType = reflect.TypeOf((*types.Header)(nil)).Elem()
 )
 
 func Test_TypesHeader_AllConsensusFieldsAreKnown(t *testing.T) {
