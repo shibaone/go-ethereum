@@ -656,12 +656,18 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 		f.transaction.GasUsed = receipt.GasUsed
 		f.transaction.Receipt = newTxReceiptFromChain(receipt, f.transaction.Type)
 		f.transaction.Status = transactionStatusFromChainTxReceipt(receipt.Status)
+	} else {
+		// When there are no receipt, it proves that we have an error, so we must set the status to FAILED
+		f.transaction.Status = pbeth.TransactionTraceStatus_FAILED
 	}
 
-	// It's possible that the transaction was reverted, but we still have a receipt, in that case, we must
-	// check the root call
-	if rootCall.StatusReverted {
-		f.transaction.Status = pbeth.TransactionTraceStatus_REVERTED
+	// Today, we follow what the RPC returns, so we do not set REVERTED, and set it to FAILED
+	if *f.applyBackwardCompatibility {
+		// It's possible that the transaction was reverted, but we still have a receipt, in that case, we must
+		// check the root call
+		if rootCall.StatusReverted {
+			f.transaction.Status = pbeth.TransactionTraceStatus_REVERTED
+		}
 	}
 
 	// Order is important, we must populate the state reverted before we remove the log block index and re-assign ordinals
