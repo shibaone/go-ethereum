@@ -874,38 +874,7 @@ func (f *Firehose) OnLog(l *types.Log) {
 	activeCall.Logs = append(activeCall.Logs, log)
 }
 
-func (f *Firehose) OnNewAccount(a common.Address) {
-	f.ensureInBlockOrTrx()
-	if f.transaction == nil {
-		// We receive OnNewAccount on finalization of the block which means there is no
-		// transaction active. In that case, we do not track the account creation because
-		// the "old" Firehose didn't but mainly because we don't have `AccountCreation` at
-		// the block level so what can we do...
-
-		// This fix was applied on Erigon branch after chain's comparison. I need to check
-		// with what the old patch was doing to write a meaningful comment here and ensure
-		// they got the logic right
-		f.blockOrdinal.Next()
-		return
-	}
-
-	if f.isPrecompiledAddr(a) {
-		return
-	}
-
-	accountCreation := &pbeth.AccountCreation{
-		Account: a.Bytes(),
-		Ordinal: f.blockOrdinal.Next(),
-	}
-
-	activeCall := f.callStack.Peek()
-	if activeCall == nil {
-		f.deferredCallState.accountCreations = append(f.deferredCallState.accountCreations, accountCreation)
-		return
-	}
-
-	activeCall.AccountCreations = append(activeCall.AccountCreations, accountCreation)
-}
+func (f *Firehose) OnNewAccount(a common.Address) {}
 
 func (f *Firehose) OnGasChange(old, new uint64, reason vm.GasChangeReason) {
 	f.ensureInBlockAndInTrx()
