@@ -190,6 +190,13 @@ func ApplyTransactionWithResultFilter(config *params.ChainConfig, bc ChainContex
 // ProcessBeaconBlockRoot applies the EIP-4788 system call to the beacon block root
 // contract. This method is exported to be used in tests.
 func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *state.StateDB) {
+	if tracer := vmenv.Config.Tracer; tracer != nil {
+		if bcLogger, ok := tracer.(BlockchainLogger); ok {
+			bcLogger.OnSystemCallStart()
+			defer bcLogger.OnSystemCallEnd()
+		}
+	}
+
 	// If EIP-4788 is enabled, we need to invoke the beaconroot storage contract with
 	// the new root
 	msg := &Message{

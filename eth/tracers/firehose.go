@@ -186,7 +186,7 @@ func (f *Firehose) OnBlockEnd(err error) {
 	firehoseDebug("block end")
 }
 
-func (f *Firehose) OnBeaconBlockRootStart(root common.Hash) {
+func (f *Firehose) OnSystemCallStart() {
 	firehoseDebug("system call start for=%s", "beacon_block_root")
 	f.ensureInBlockAndNotInTrx()
 
@@ -194,7 +194,7 @@ func (f *Firehose) OnBeaconBlockRootStart(root common.Hash) {
 	f.transaction = &pbeth.TransactionTrace{}
 }
 
-func (f *Firehose) OnBeaconBlockRootEnd() {
+func (f *Firehose) OnSystemCallEnd() {
 	f.ensureInBlockAndInTrx()
 	f.ensureInSystemCall()
 

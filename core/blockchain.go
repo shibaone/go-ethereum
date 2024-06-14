@@ -214,8 +214,8 @@ type BlockchainLogger interface {
 	// OnBlockUpdate is called when a block header was modified after the OnBlockStart. This happens when mining, but als
 	OnBlockUpdate(block *types.Block, td *big.Int)
 	OnGenesisBlock(genesis *types.Block, alloc GenesisAlloc)
-	OnBeaconBlockRootStart(root common.Hash)
-	OnBeaconBlockRootEnd()
+	OnSystemCallStart()
+	OnSystemCallEnd()
 }
 
 // txLookup is wrapper over transaction lookup along with the corresponding
