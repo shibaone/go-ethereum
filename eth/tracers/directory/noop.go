@@ -88,6 +88,7 @@ func (*NoopTracer) CaptureArbitrumStorageGet(key common.Hash, depth int, before 
 func (*NoopTracer) CaptureArbitrumStorageSet(key, value common.Hash, depth int, before bool) {}
 func (*NoopTracer) CaptureArbitrumTransfer(env *vm.EVM, from, to *common.Address, value *big.Int, before bool, purpose string) {
 }
+func (*NoopTracer) CaptureStylusHostio(name string, args, outs []byte, startInk, endInk uint64) {}
 
 func (*NoopTracer) OnLog(log *types.Log) {}
 

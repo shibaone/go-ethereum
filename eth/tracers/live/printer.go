@@ -53,6 +53,8 @@ func (p *Printer) CaptureEnter(typ vm.OpCode, from common.Address, to common.Add
 	fmt.Printf("CaptureEnter: typ=%v, from=%v, to=%v, input=%s, gas=%v, value=%v\n", typ, from, to, hexutil.Bytes(input), gas, value)
 }
 
+func (*Printer) CaptureStylusHostio(name string, args, outs []byte, startInk, endInk uint64) {}
+
 // CaptureExit is called when EVM exits a scope, even if the scope didn't
 // execute any code.
 func (p *Printer) CaptureExit(output []byte, gasUsed uint64, err error) {

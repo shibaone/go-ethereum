@@ -49,9 +49,10 @@ type callContext struct {
 
 // callLog is the result of LOG opCode
 type callLog struct {
-	Address common.Address `json:"address"`
-	Topics  []common.Hash  `json:"topics"`
-	Data    hexutil.Bytes  `json:"data"`
+	Address  common.Address `json:"address"`
+	Topics   []common.Hash  `json:"topics"`
+	Data     hexutil.Bytes  `json:"data"`
+	Position hexutil.Uint   `json:"position"`
 }
 
 type arbitrumTransfer struct {
@@ -134,12 +135,7 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 			}
 			// Configure a blockchain with the given prestate
 			var (
-				signer    = types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)), uint64(test.Context.Time))
-				origin, _ = signer.Sender(tx)
-				txContext = vm.TxContext{
-					Origin:   origin,
-					GasPrice: tx.GasPrice(),
-				}
+				signer  = types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)), uint64(test.Context.Time))
 				context = vm.BlockContext{
 					CanTransfer: core.CanTransfer,
 					Transfer:    core.Transfer,
@@ -164,11 +160,11 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 				t.Fatalf("failed to create call tracer: %v", err)
 			}
 			statedb.SetLogger(tracer)
-			evm := vm.NewEVM(context, txContext, statedb, test.Genesis.Config, vm.Config{Tracer: tracer})
-			msg, err := core.TransactionToMessage(tx, signer, nil)
+			msg, err := core.TransactionToMessage(tx, signer, context.BaseFee, core.MessageReplayMode)
 			if err != nil {
 				t.Fatalf("failed to prepare transaction for tracing: %v", err)
 			}
+			evm := vm.NewEVM(context, core.NewEVMTxContext(msg), statedb, test.Genesis.Config, vm.Config{Tracer: tracer})
 			tracer.CaptureTxStart(evm, tx, msg.From)
 			vmRet, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
 			if err != nil {
@@ -242,10 +238,6 @@ func benchTracer(tracerName string, test *callTracerTest, b *testing.B) {
 		b.Fatalf("failed to parse testcase input: %v", err)
 	}
 	signer := types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)), uint64(test.Context.Time))
-	msg, err := core.TransactionToMessage(tx, signer, nil)
-	if err != nil {
-		b.Fatalf("failed to prepare transaction for tracing: %v", err)
-	}
 	origin, _ := signer.Sender(tx)
 	txContext := vm.TxContext{
 		Origin:   origin,
@@ -259,6 +251,10 @@ func benchTracer(tracerName string, test *callTracerTest, b *testing.B) {
 		Time:        uint64(test.Context.Time),
 		Difficulty:  (*big.Int)(test.Context.Difficulty),
 		GasLimit:    uint64(test.Context.GasLimit),
+	}
+	msg, err := core.TransactionToMessage(tx, signer, context.BaseFee, core.MessageReplayMode)
+	if err != nil {
+		b.Fatalf("failed to prepare transaction for tracing: %v", err)
 	}
 	triedb, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
 	defer triedb.Close()
@@ -346,7 +342,7 @@ func TestInternals(t *testing.T) {
 				byte(vm.LOG0),
 			},
 			tracer: mkTracer("callTracer", json.RawMessage(`{ "withLog": true }`)),
-			want:   fmt.Sprintf(`{"beforeEVMTransfers":[{"purpose":"feePayment","from":"0x000000000000000000000000000000000000FEeD","to":null,"value":"0x0"}],"afterEVMTransfers":[{"purpose":"gasRefund","from":null,"to":"0x000000000000000000000000000000000000FEeD","value":"0x0"},{"purpose":"tip","from":null,"to":"0x0000000000000000000000000000000000000000","value":"0x0"}],"from":"%s","gas":"0x13880","gasUsed":"0x5b9e","to":"0x00000000000000000000000000000000deadbeef","input":"0x","logs":[{"address":"0x00000000000000000000000000000000deadbeef","topics":[],"data":"0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}],"value":"0x0","type":"CALL"}`, originHex),
+			want:   `{"beforeEVMTransfers":[{"purpose":"feePayment","from":"0x000000000000000000000000000000000000FEeD","to":null,"value":"0x0"}],"afterEVMTransfers":[{"purpose":"gasRefund","from":null,"to":"0x000000000000000000000000000000000000FEeD","value":"0x0"},{"purpose":"tip","from":null,"to":"0x0000000000000000000000000000000000000000","value":"0x0"}],"from":"0x000000000000000000000000000000000000feed","gas":"0x13880","gasUsed":"0x5b9e","to":"0x00000000000000000000000000000000deadbeef","input":"0x","logs":[{"address":"0x00000000000000000000000000000000deadbeef","topics":[],"data":"0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","position":"0x0"}],"value":"0x0","type":"CALL"}`,
 		},
 		{
 			// Leads to OOM on the prestate tracer
@@ -429,7 +425,7 @@ func TestInternals(t *testing.T) {
 				GasPrice: tx.GasPrice(),
 			}
 			evm := vm.NewEVM(context, txContext, statedb, config, vm.Config{Tracer: tc.tracer})
-			msg, err := core.TransactionToMessage(tx, signer, big.NewInt(0))
+			msg, err := core.TransactionToMessage(tx, signer, big.NewInt(0), core.MessageReplayMode)
 			if err != nil {
 				t.Fatalf("test %v: failed to create message: %v", tc.name, err)
 			}

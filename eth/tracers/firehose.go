@@ -65,7 +65,8 @@ type Firehose struct {
 	blockFinality *FinalityStatus
 
 	// Transaction state
-	transaction         *pbeth.TransactionTrace
+	transaction *pbeth.TransactionTrace
+
 	transactionLogIndex uint32
 	inSystemCall        bool
 	isPrecompiledAddr   func(addr common.Address) bool
@@ -291,6 +292,9 @@ func (f *Firehose) CaptureArbitrumStorageGet(key common.Hash, depth int, before 
 func (f *Firehose) CaptureArbitrumStorageSet(key, value common.Hash, depth int, before bool) {
 	// nothing interesting for firehose here
 }
+
+func (*Firehose) CaptureStylusHostio(name string, args, outs []byte, startInk, endInk uint64) {}
+
 func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.TransactionTrace {
 	firehoseDebug("completing transaction call_count=%d receipt=%s", len(f.transaction.Calls), (*receiptView)(receipt))
 

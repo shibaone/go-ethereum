@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/ethereum/go-ethereum/ethdb/pebble"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/olekukonko/tablewriter"
 )
@@ -39,6 +40,11 @@ type freezerdb struct {
 	ancientRoot string
 	ethdb.KeyValueStore
 	ethdb.AncientStore
+}
+
+// AncientDatadir returns the path of root ancient directory.
+func (frdb *freezerdb) WasmDataBase() (ethdb.KeyValueStore, uint32) {
+	return frdb, 0
 }
 
 // AncientDatadir returns the path of root ancient directory.
@@ -164,10 +170,38 @@ func (db *nofreezedb) AncientDatadir() (string, error) {
 	return "", errNotSupported
 }
 
+// AncientDatadir returns the path of root ancient directory.
+func (db *nofreezedb) WasmDataBase() (ethdb.KeyValueStore, uint32) {
+	return db, 0
+}
+
 // NewDatabase creates a high level database on top of a given key-value data
 // store without a freezer moving immutable chain segments into cold storage.
 func NewDatabase(db ethdb.KeyValueStore) ethdb.Database {
 	return &nofreezedb{KeyValueStore: db}
+}
+
+type dbWithWasmEntry struct {
+	ethdb.Database
+	wasmDb       ethdb.KeyValueStore
+	wasmCacheTag uint32
+}
+
+func (db *dbWithWasmEntry) WasmDataBase() (ethdb.KeyValueStore, uint32) {
+	return db.wasmDb, db.wasmCacheTag
+}
+
+func (db *dbWithWasmEntry) Close() error {
+	dbErr := db.Database.Close()
+	wasmErr := db.wasmDb.Close()
+	if dbErr != nil {
+		return dbErr
+	}
+	return wasmErr
+}
+
+func WrapDatabaseWithWasm(db ethdb.Database, wasm ethdb.KeyValueStore, cacheTag uint32) ethdb.Database {
+	return &dbWithWasmEntry{db, wasm, cacheTag}
 }
 
 // resolveChainFreezerDir is a helper function which resolves the absolute path
@@ -177,7 +211,7 @@ func resolveChainFreezerDir(ancient string) string {
 	// sub folder, if not then two possibilities:
 	// - chain freezer is not initialized
 	// - chain freezer exists in legacy location (root ancient folder)
-	freezer := path.Join(ancient, chainFreezerName)
+	freezer := path.Join(ancient, ChainFreezerName)
 	if !common.FileExist(freezer) {
 		if !common.FileExist(ancient) {
 			// The entire ancient store is not initialized, still use the sub
@@ -321,6 +355,16 @@ func NewLevelDBDatabase(file string, cache int, handles int, namespace string, r
 	return NewDatabase(db), nil
 }
 
+// NewPebbleDBDatabase creates a persistent key-value database without a freezer
+// moving immutable chain segments into cold storage.
+func NewPebbleDBDatabase(file string, cache int, handles int, namespace string, readonly, ephemeral bool, extraOptions *pebble.ExtraOptions) (ethdb.Database, error) {
+	db, err := pebble.New(file, cache, handles, namespace, readonly, ephemeral, extraOptions)
+	if err != nil {
+		return nil, err
+	}
+	return NewDatabase(db), nil
+}
+
 const (
 	dbPebble  = "pebble"
 	dbLeveldb = "leveldb"
@@ -355,6 +399,8 @@ type OpenOptions struct {
 	// Ephemeral means that filesystem sync operations should be avoided: data integrity in the face of
 	// a crash is not important. This option should typically be used in tests.
 	Ephemeral bool
+
+	PebbleExtraOptions *pebble.ExtraOptions
 }
 
 // openKeyValueDatabase opens a disk-based key-value database, e.g. leveldb or pebble.
@@ -375,26 +421,16 @@ func openKeyValueDatabase(o OpenOptions) (ethdb.Database, error) {
 		return nil, fmt.Errorf("db.engine choice was %v but found pre-existing %v database in specified data directory", o.Type, existingDb)
 	}
 	if o.Type == dbPebble || existingDb == dbPebble {
-		if PebbleEnabled {
-			log.Info("Using pebble as the backing database")
-			return NewPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.Ephemeral)
-		} else {
-			return nil, errors.New("db.engine 'pebble' not supported on this platform")
-		}
+		log.Info("Using pebble as the backing database")
+		return NewPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.Ephemeral, o.PebbleExtraOptions)
 	}
 	if o.Type == dbLeveldb || existingDb == dbLeveldb {
 		log.Info("Using leveldb as the backing database")
 		return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
 	}
-	// No pre-existing database, no user-requested one either. Default to Pebble
-	// on supported platforms and LevelDB on anything else.
-	if PebbleEnabled {
-		log.Info("Defaulting to pebble as the backing database")
-		return NewPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.Ephemeral)
-	} else {
-		log.Info("Defaulting to leveldb as the backing database")
-		return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
-	}
+	// No pre-existing database, no user-requested one either. Default to Pebble.
+	log.Info("Defaulting to pebble as the backing database")
+	return NewPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.Ephemeral, o.PebbleExtraOptions)
 }
 
 // Open opens both a disk-based key-value database such as leveldb or pebble, but also
@@ -656,7 +692,6 @@ func ReadChainMetadata(db ethdb.KeyValueStore) [][]string {
 		{"snapshotRecoveryNumber", pp(ReadSnapshotRecoveryNumber(db))},
 		{"snapshotRoot", fmt.Sprintf("%v", ReadSnapshotRoot(db))},
 		{"txIndexTail", pp(ReadTxIndexTail(db))},
-		{"fastTxLookupLimit", pp(ReadFastTxLookupLimit(db))},
 	}
 	if b := ReadSkeletonSyncStatus(db); b != nil {
 		data = append(data, []string{"SkeletonSyncStatus", string(b)})

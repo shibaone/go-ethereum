@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 	"github.com/ethereum/go-ethereum/trie/triestate"
+	"github.com/holiman/uint256"
 )
 
 const (
@@ -46,6 +47,7 @@ const (
 type revision struct {
 	id           int
 	journalIndex int
+
 	// Arbitrum: track the total balance change across all accounts
 	unexpectedBalanceDelta *big.Int
 }
@@ -187,6 +189,10 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 	sdb := &StateDB{
 		arbExtraData: &ArbitrumExtraData{
 			unexpectedBalanceDelta: new(big.Int),
+			openWasmPages:          0,
+			everWasmPages:          0,
+			activatedWasms:         make(map[common.Hash]*ActivatedWasm),
+			recentWasms:            NewRecentWasms(),
 		},
 
 		db:                   db,
@@ -212,15 +218,6 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 	if sdb.snaps != nil {
 		sdb.snap = sdb.snaps.Snapshot(root)
 	}
-	return sdb, nil
-}
-
-func NewDeterministic(root common.Hash, db Database) (*StateDB, error) {
-	sdb, err := New(root, db, nil)
-	if err != nil {
-		return nil, err
-	}
-	sdb.deterministic = true
 	return sdb, nil
 }
 
@@ -340,12 +337,12 @@ func (s *StateDB) Empty(addr common.Address) bool {
 }
 
 // GetBalance retrieves the balance from the given address or 0 if object not found
-func (s *StateDB) GetBalance(addr common.Address) *big.Int {
+func (s *StateDB) GetBalance(addr common.Address) *uint256.Int {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
 		return stateObject.Balance()
 	}
-	return common.Big0
+	return common.U2560
 }
 
 // GetNonce retrieves the nonce from the given address or 0 if object not found
@@ -391,10 +388,10 @@ func (s *StateDB) GetCodeSize(addr common.Address) int {
 
 func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 	stateObject := s.getStateObject(addr)
-	if stateObject == nil {
-		return common.Hash{}
+	if stateObject != nil {
+		return common.BytesToHash(stateObject.CodeHash())
 	}
-	return common.BytesToHash(stateObject.CodeHash())
+	return common.Hash{}
 }
 
 // GetState retrieves a value from the given account's storage trie.
@@ -433,32 +430,32 @@ func (s *StateDB) HasSelfDestructed(addr common.Address) bool {
  */
 
 // AddBalance adds amount to the account associated with addr.
-func (s *StateDB) AddBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
-	stateObject := s.GetOrNewStateObject(addr)
+func (s *StateDB) AddBalance(addr common.Address, amount *uint256.Int, reason BalanceChangeReason) {
+	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
-		s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount)
+		s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount.ToBig())
 		stateObject.AddBalance(amount, reason)
 	}
 }
 
 // SubBalance subtracts amount from the account associated with addr.
-func (s *StateDB) SubBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
-	stateObject := s.GetOrNewStateObject(addr)
+func (s *StateDB) SubBalance(addr common.Address, amount *uint256.Int, reason BalanceChangeReason) {
+	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
-		s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, amount)
+		s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, amount.ToBig())
 		stateObject.SubBalance(amount, reason)
 	}
 }
 
-func (s *StateDB) SetBalance(addr common.Address, amount *big.Int, reason BalanceChangeReason) {
-	stateObject := s.GetOrNewStateObject(addr)
+func (s *StateDB) SetBalance(addr common.Address, amount *uint256.Int, reason BalanceChangeReason) {
+	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
 		if amount == nil {
-			amount = big.NewInt(0)
+			amount = uint256.NewInt(0)
 		}
 		prevBalance := stateObject.Balance()
-		s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount)
-		s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, prevBalance)
+		s.arbExtraData.unexpectedBalanceDelta.Add(s.arbExtraData.unexpectedBalanceDelta, amount.ToBig())
+		s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, prevBalance.ToBig())
 		stateObject.SetBalance(amount, reason)
 	}
 }
@@ -471,21 +468,21 @@ func (s *StateDB) ExpectBalanceBurn(amount *big.Int) {
 }
 
 func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
-	stateObject := s.GetOrNewStateObject(addr)
+	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.SetNonce(nonce)
 	}
 }
 
 func (s *StateDB) SetCode(addr common.Address, code []byte) {
-	stateObject := s.GetOrNewStateObject(addr)
+	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.SetCode(crypto.Keccak256Hash(code), code)
 	}
 }
 
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
-	stateObject := s.GetOrNewStateObject(addr)
+	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.SetState(key, value)
 	}
@@ -506,7 +503,7 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 	if _, ok := s.stateObjectsDestruct[addr]; !ok {
 		s.stateObjectsDestruct[addr] = nil
 	}
-	stateObject := s.GetOrNewStateObject(addr)
+	stateObject := s.getOrNewStateObject(addr)
 	for k, v := range storage {
 		stateObject.SetState(k, v)
 	}
@@ -523,8 +520,8 @@ func (s *StateDB) SelfDestruct(addr common.Address) {
 		return
 	}
 	var (
-		prev = new(big.Int).Set(stateObject.Balance())
-		n    = new(big.Int)
+		prev = new(uint256.Int).Set(stateObject.Balance())
+		n    = new(uint256.Int)
 	)
 	s.journal.append(selfDestructChange{
 		account:     &addr,
@@ -532,11 +529,10 @@ func (s *StateDB) SelfDestruct(addr common.Address) {
 		prevbalance: prev,
 	})
 	if s.logger != nil {
-		s.logger.OnBalanceChange(addr, prev, n, BalanceDecreaseSelfdestruct)
+		s.logger.OnBalanceChange(addr, prev.ToBig(), n.ToBig(), BalanceDecreaseSelfdestruct)
 	}
 	stateObject.markSelfdestructed()
-	s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, stateObject.data.Balance)
-
+	s.arbExtraData.unexpectedBalanceDelta.Sub(s.arbExtraData.unexpectedBalanceDelta, stateObject.data.Balance.ToBig())
 	stateObject.data.Balance = n
 }
 
@@ -698,8 +694,8 @@ func (s *StateDB) setStateObject(object *stateObject) {
 	s.stateObjects[object.Address()] = object
 }
 
-// GetOrNewStateObject retrieves a state object or create a new state object if nil.
-func (s *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
+// getOrNewStateObject retrieves a state object or create a new state object if nil.
+func (s *StateDB) getOrNewStateObject(addr common.Address) *stateObject {
 	stateObject := s.getStateObject(addr)
 	if stateObject == nil {
 		stateObject, _ = s.createObject(addr)
@@ -748,9 +744,6 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 		delete(s.accountsOrigin, prev.address)
 		delete(s.storagesOrigin, prev.address)
 	}
-
-	newobj.created = true
-
 	s.setStateObject(newobj)
 	if prev != nil && !prev.deleted {
 		return newobj, prev
@@ -782,6 +775,10 @@ func (s *StateDB) Copy() *StateDB {
 	state := &StateDB{
 		arbExtraData: &ArbitrumExtraData{
 			unexpectedBalanceDelta: new(big.Int).Set(s.arbExtraData.unexpectedBalanceDelta),
+			activatedWasms:         make(map[common.Hash]*ActivatedWasm, len(s.arbExtraData.activatedWasms)),
+			recentWasms:            s.arbExtraData.recentWasms.Copy(),
+			openWasmPages:          s.arbExtraData.openWasmPages,
+			everWasmPages:          s.arbExtraData.everWasmPages,
 		},
 
 		db:                   s.db,
@@ -874,6 +871,18 @@ func (s *StateDB) Copy() *StateDB {
 	state.accessList = s.accessList.Copy()
 	state.transientStorage = s.transientStorage.Copy()
 
+	// Arbitrum: copy wasm calls and activated WASMs
+	if s.arbExtraData.userWasms != nil {
+		state.arbExtraData.userWasms = make(UserWasms, len(s.arbExtraData.userWasms))
+		for call, wasm := range s.arbExtraData.userWasms {
+			state.arbExtraData.userWasms[call] = wasm
+		}
+	}
+	for moduleHash, info := range s.arbExtraData.activatedWasms {
+		// It's fine to skip a deep copy since activations are immutable.
+		state.arbExtraData.activatedWasms[moduleHash] = info
+	}
+
 	// If there's a prefetcher running, make an inactive copy of it that can
 	// only access data but does not actively preload (since the user will not
 	// know that they need to explicitly terminate an active copy).
@@ -935,7 +944,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 
 			// If ether was sent to account post-selfdestruct it is burnt.
 			if bal := obj.Balance(); bal.Sign() != 0 && s.logger != nil {
-				s.logger.OnBalanceChange(obj.address, bal, new(big.Int), BalanceDecreaseSelfdestructBurn)
+				s.logger.OnBalanceChange(obj.address, bal.ToBig(), new(big.Int), BalanceDecreaseSelfdestructBurn)
 			}
 			// We need to maintain account deletions explicitly (will remain
 			// set indefinitely). Note only the first occurred self-destruct
@@ -1051,6 +1060,10 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 func (s *StateDB) SetTxContext(thash common.Hash, ti int) {
 	s.thash = thash
 	s.txIndex = ti
+
+	// Arbitrum: clear memory charging state for new tx
+	s.arbExtraData.openWasmPages = 0
+	s.arbExtraData.everWasmPages = 0
 }
 
 func (s *StateDB) clearJournalAndRefund() {
@@ -1077,10 +1090,12 @@ func (s *StateDB) fastDeleteStorage(addrHash common.Hash, root common.Hash) (boo
 		nodes = trienode.NewNodeSet(addrHash)
 		slots = make(map[common.Hash][]byte)
 	)
-	stack := trie.NewStackTrie(func(path []byte, hash common.Hash, blob []byte) {
+	options := trie.NewStackTrieOptions()
+	options = options.WithWriter(func(path []byte, hash common.Hash, blob []byte) {
 		nodes.AddNode(path, trienode.NewDeleted())
 		size += common.StorageSize(len(path))
 	})
+	stack := trie.NewStackTrie(options)
 	for iter.Next() {
 		if size > storageDeleteLimit {
 			return true, size, nil, nil, nil
@@ -1109,7 +1124,7 @@ func (s *StateDB) fastDeleteStorage(addrHash common.Hash, root common.Hash) (boo
 // employed when the associated state snapshot is not available. It iterates the
 // storage slots along with all internal trie nodes via trie directly.
 func (s *StateDB) slowDeleteStorage(addr common.Address, addrHash common.Hash, root common.Hash) (bool, common.StorageSize, map[common.Hash][]byte, *trienode.NodeSet, error) {
-	tr, err := s.db.OpenStorageTrie(s.originalRoot, addr, root)
+	tr, err := s.db.OpenStorageTrie(s.originalRoot, addr, root, s.trie)
 	if err != nil {
 		return false, 0, nil, nil, fmt.Errorf("failed to open storage trie, err: %w", err)
 	}
@@ -1291,6 +1306,7 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		storageTrieNodesDeleted int
 		nodes                   = trienode.NewMergedNodeSet()
 		codeWriter              = s.db.DiskDB().NewBatch()
+		wasmCodeWriter          = s.db.WasmStore().NewBatch()
 	)
 	// Handle all state deletions first
 	incomplete, err := s.handleDestruction(nodes)
@@ -1325,9 +1341,23 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 			storageTrieNodesDeleted += deleted
 		}
 	}
+
+	// Arbitrum: write Stylus programs to disk
+	for moduleHash, info := range s.arbExtraData.activatedWasms {
+		rawdb.WriteActivation(wasmCodeWriter, moduleHash, info.Asm, info.Module)
+	}
+	if len(s.arbExtraData.activatedWasms) > 0 {
+		s.arbExtraData.activatedWasms = make(map[common.Hash]*ActivatedWasm)
+	}
+
 	if codeWriter.ValueSize() > 0 {
 		if err := codeWriter.Write(); err != nil {
 			log.Crit("Failed to commit dirty codes", "error", err)
+		}
+	}
+	if wasmCodeWriter.ValueSize() > 0 {
+		if err := wasmCodeWriter.Write(); err != nil {
+			log.Crit("Failed to commit dirty stylus codes", "error", err)
 		}
 	}
 	// Write the account trie changes, measuring the amount of wasted time
