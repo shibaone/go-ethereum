@@ -422,14 +422,6 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	// future scenarios
 	evm.StateDB.AddBalance(addr, new(uint256.Int), state.BalanceChangeTouchAccount)
 
-	// Invoke tracer hooks that signal entering/exiting a call frame
-	if evm.Config.Tracer != nil {
-		evm.Config.Tracer.CaptureEnter(STATICCALL, caller.Address(), addr, input, gas, nil)
-		defer func(startGas uint64) {
-			evm.Config.Tracer.CaptureExit(ret, startGas-gas, err)
-		}(gas)
-	}
-
 	if p, isPrecompile := evm.precompile(addr); isPrecompile {
 		info := &AdvancedPrecompileCall{
 			PrecompileAddress: addr,
