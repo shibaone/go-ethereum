@@ -1093,7 +1093,13 @@ func (s *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rpc.
 
 	result := make([]map[string]interface{}, len(receipts))
 	for i, receipt := range receipts {
-		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i)
+		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i, false)
+	}
+
+	stateSyncReceipt := rawdb.ReadBorReceipt(s.b.ChainDb(), block.Hash(), block.NumberU64(), s.b.ChainConfig())
+	if stateSyncReceipt != nil {
+		tx, _, _, _ := rawdb.ReadBorTransaction(s.b.ChainDb(), stateSyncReceipt.TxHash)
+		result = append(result, marshalReceipt(stateSyncReceipt, block.Hash(), block.NumberU64(), signer, tx, len(result), true))
 	}
 
 	return result, nil
@@ -2320,17 +2326,25 @@ func (s *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash common.
 
 	// Derive the sender.
 	signer := types.MakeSigner(s.b.ChainConfig(), header.Number, header.Time)
-	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index)), nil
+	return marshalReceipt(receipt, blockHash, blockNumber, signer, tx, int(index), borTx), nil
 }
 
 // marshalReceipt marshals a transaction receipt into a JSON object.
-func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int) map[string]interface{} {
+func marshalReceipt(receipt *types.Receipt, blockHash common.Hash, blockNumber uint64, signer types.Signer, tx *types.Transaction, txIndex int, borTx bool) map[string]interface{} {
 	from, _ := types.Sender(signer, tx)
+
+	var txHash common.Hash
+
+	if borTx {
+		txHash = types.GetDerivedBorTxHash(types.BorReceiptKey(blockNumber, blockHash))
+	} else {
+		txHash = tx.Hash()
+	}
 
 	fields := map[string]interface{}{
 		"blockHash":         blockHash,
 		"blockNumber":       hexutil.Uint64(blockNumber),
-		"transactionHash":   tx.Hash(),
+		"transactionHash":   txHash,
 		"transactionIndex":  hexutil.Uint64(txIndex),
 		"from":              from,
 		"to":                tx.To(),
@@ -2809,6 +2823,12 @@ func (api *DebugAPI) GetTraceStack() string {
 
 		buf = make([]byte, 2*len(buf))
 	}
+}
+
+// PeerStats returns the current head height and td of all the connected peers
+// along with few additional identifiers.
+func (api *DebugAPI) PeerStats() interface{} {
+	return api.b.PeerStats()
 }
 
 // NetAPI offers network related RPC methods
