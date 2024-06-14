@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers/directory"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests"
+	// Force-load the native, to trigger registration
 )
 
 // flatCallTrace is the result of a callTracerParity run.
@@ -101,17 +102,19 @@ func flatCallTracerTestRunner(tracerName string, filename string, dirPath string
 	if err != nil {
 		return fmt.Errorf("failed to create call tracer: %v", err)
 	}
-	statedb.SetLogger(tracer)
 	msg, err := core.TransactionToMessage(tx, signer, context.BaseFee, core.MessageReplayMode)
 	if err != nil {
 		return fmt.Errorf("failed to prepare transaction for tracing: %v", err)
 	}
 	evm := vm.NewEVM(context, core.NewEVMTxContext(msg), statedb, test.Genesis.Config, vm.Config{Tracer: tracer})
+	tracer.CaptureTxStart(evm, tx, msg.From)
 	st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
 
-	if _, err = st.TransitionDb(); err != nil {
+	vmRet, err := st.TransitionDb()
+	if err != nil {
 		return fmt.Errorf("failed to execute transaction: %v", err)
 	}
+	tracer.CaptureTxEnd(&types.Receipt{GasUsed: vmRet.UsedGas}, nil)
 
 	// Retrieve the trace result and compare against the etalon
 	res, err := tracer.GetResult()

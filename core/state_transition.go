@@ -413,6 +413,7 @@ func (st *StateTransition) preCheck() error {
 //
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
+
 func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	endTxNow, startHookUsedGas, err, returnData := st.evm.ProcessingHook.StartTxHook()
 	if endTxNow {
