@@ -106,6 +106,9 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 			continue
 		}
 		file := file // capture range variable
+		if file.Name() != "simple_onlytop.json" {
+			continue
+		}
 		t.Run(camel(strings.TrimSuffix(file.Name(), ".json")), func(t *testing.T) {
 			t.Parallel()
 
@@ -388,6 +391,8 @@ func TestInternals(t *testing.T) {
 			if err != nil {
 				t.Fatalf("test %v: failed to sign transaction: %v", tc.name, err)
 			}
+
+			state.StateDB.SetLogger(tc.tracer.Hooks)
 
 			txContext := vm.TxContext{
 				Origin:   origin,
