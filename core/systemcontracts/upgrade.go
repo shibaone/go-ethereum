@@ -8,8 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/firehose"
-
+	"github.com/ethereum/go-ethereum/core/systemcontracts/bohr"
 	"github.com/ethereum/go-ethereum/core/systemcontracts/bruno"
 	"github.com/ethereum/go-ethereum/core/systemcontracts/euler"
 	"github.com/ethereum/go-ethereum/core/systemcontracts/feynman"
@@ -24,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/systemcontracts/planck"
 	"github.com/ethereum/go-ethereum/core/systemcontracts/plato"
 	"github.com/ethereum/go-ethereum/core/systemcontracts/ramanujan"
+	"github.com/ethereum/go-ethereum/firehose"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -80,6 +80,8 @@ var (
 	feynmanFixUpgrade = make(map[string]*Upgrade)
 
 	haberFixUpgrade = make(map[string]*Upgrade)
+
+	bohrUpgrade = make(map[string]*Upgrade)
 )
 
 func init() {
@@ -738,6 +740,54 @@ func init() {
 			},
 		},
 	}
+
+	bohrUpgrade[mainNet] = &Upgrade{
+		UpgradeName: "bohr",
+		Configs: []*UpgradeConfig{
+			{
+				ContractAddr: common.HexToAddress(ValidatorContract),
+				CommitUrl:    "https://github.com/bnb-chain/bsc-genesis-contract/commit/398c9364aad5261c1ecd90ac3ab2df89b65c45e3",
+				Code:         bohr.MainnetValidatorContract,
+			},
+			{
+				ContractAddr: common.HexToAddress(StakeHubContract),
+				CommitUrl:    "https://github.com/bnb-chain/bsc-genesis-contract/commit/398c9364aad5261c1ecd90ac3ab2df89b65c45e3",
+				Code:         bohr.MainnetStakeHubContract,
+			},
+		},
+	}
+
+	bohrUpgrade[chapelNet] = &Upgrade{
+		UpgradeName: "bohr",
+		Configs: []*UpgradeConfig{
+			{
+				ContractAddr: common.HexToAddress(ValidatorContract),
+				CommitUrl:    "https://github.com/bnb-chain/bsc-genesis-contract/commit/398c9364aad5261c1ecd90ac3ab2df89b65c45e3",
+				Code:         bohr.ChapelValidatorContract,
+			},
+			{
+				ContractAddr: common.HexToAddress(StakeHubContract),
+				CommitUrl:    "https://github.com/bnb-chain/bsc-genesis-contract/commit/398c9364aad5261c1ecd90ac3ab2df89b65c45e3",
+				Code:         bohr.ChapelStakeHubContract,
+			},
+		},
+	}
+
+	bohrUpgrade[rialtoNet] = &Upgrade{
+		UpgradeName: "bohr",
+		Configs: []*UpgradeConfig{
+			{
+				ContractAddr: common.HexToAddress(ValidatorContract),
+				CommitUrl:    "https://github.com/bnb-chain/bsc-genesis-contract/commit/398c9364aad5261c1ecd90ac3ab2df89b65c45e3",
+				Code:         bohr.RialtoValidatorContract,
+			},
+			{
+				ContractAddr: common.HexToAddress(StakeHubContract),
+				CommitUrl:    "https://github.com/bnb-chain/bsc-genesis-contract/commit/398c9364aad5261c1ecd90ac3ab2df89b65c45e3",
+				Code:         bohr.RialtoStakeHubContract,
+			},
+		},
+	}
 }
 
 func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.Int, lastBlockTime uint64, blockTime uint64, statedb *state.StateDB, firehoseContext *firehose.Context) {
@@ -820,6 +870,10 @@ func UpgradeBuildInSystemContract(config *params.ChainConfig, blockNumber *big.I
 
 	if config.IsOnHaberFix(blockNumber, lastBlockTime, blockTime) {
 		applySystemContractUpgrade(haberFixUpgrade[network], blockNumber, statedb, logger, firehoseContext)
+	}
+
+	if config.IsOnBohr(blockNumber, lastBlockTime, blockTime) {
+		applySystemContractUpgrade(bohrUpgrade[network], blockNumber, statedb, logger, firehoseContext)
 	}
 
 	/*
