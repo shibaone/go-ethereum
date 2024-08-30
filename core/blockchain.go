@@ -1871,7 +1871,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		}
 		bc.hc.tdCache.Add(block.Hash(), externTd)
 		bc.blockCache.Add(block.Hash(), block)
-		bc.receiptsCache.Add(block.Hash(), receipts)
+		bc.cacheReceipts(block.Hash(), receipts, block)
 		if bc.chainConfig.IsCancun(block.Number(), block.Time()) {
 			bc.sidecarsCache.Add(block.Hash(), block.Sidecars())
 		}
@@ -2413,8 +2413,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		if err != nil {
 			return it.index, err
 		}
-
-		bc.cacheReceipts(block.Hash(), receipts, block)
 
 		if firehoseContext.Enabled() {
 			// This is last point where there is no more an early return due to an error, we flush here
