@@ -30,7 +30,6 @@ require (
 	github.com/ethereum/c-kzg-4844 v0.4.3
 	github.com/fatih/color v1.17.0
 	github.com/fjl/gencodec v0.0.0-20230517082657-f9840df7b83e
-	github.com/fjl/memsize v0.0.2
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gballet/go-libpcsclite v0.0.0-20191108122812-4678299bea08
 	github.com/gballet/go-verkle v0.1.1-0.20231031103413-a67434b50f46
@@ -98,7 +97,7 @@ require (
 	golang.org/x/text v0.16.0
 	golang.org/x/time v0.5.0
 	golang.org/x/tools v0.22.0
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.64.1
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
