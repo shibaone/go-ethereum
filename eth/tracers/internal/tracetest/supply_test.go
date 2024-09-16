@@ -154,10 +154,6 @@ func TestSupplyRewards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to test supply tracer: %v", err)
 	}
-	for i, el := range out {
-		b, _ := json.Marshal(el)
-		fmt.Println(i, string(b))
-	}
 	actual := out[expected.Number]
 
 	compareAsJSON(t, expected, actual)
