@@ -162,7 +162,6 @@ func runCmd(ctx *cli.Context) error {
 	if ctx.String(SenderFlag.Name) != "" {
 		sender = common.HexToAddress(ctx.String(SenderFlag.Name))
 	}
-	statedb.CreateAccount(sender)
 
 	if ctx.String(ReceiverFlag.Name) != "" {
 		receiver = common.HexToAddress(ctx.String(ReceiverFlag.Name))
@@ -222,6 +221,7 @@ func runCmd(ctx *cli.Context) error {
 		Time:        genesisConfig.Timestamp,
 		Coinbase:    genesisConfig.Coinbase,
 		BlockNumber: new(big.Int).SetUint64(genesisConfig.Number),
+		BaseFee:     genesisConfig.BaseFee,
 		BlobHashes:  blobHashes,
 		BlobBaseFee: blobBaseFee,
 		EVMConfig: vm.Config{
@@ -272,8 +272,17 @@ func runCmd(ctx *cli.Context) error {
 	output, leftOverGas, stats, err := timedExec(bench, execFunc)
 
 	if ctx.Bool(DumpFlag.Name) {
-		statedb.Commit(genesisConfig.Number, true)
-		fmt.Println(string(statedb.Dump(nil)))
+		root, err := statedb.Commit(genesisConfig.Number, true)
+		if err != nil {
+			fmt.Printf("Failed to commit changes %v\n", err)
+			return err
+		}
+		dumpdb, err := state.New(root, sdb, nil)
+		if err != nil {
+			fmt.Printf("Failed to open statedb %v\n", err)
+			return err
+		}
+		fmt.Println(string(dumpdb.Dump(nil)))
 	}
 
 	if ctx.Bool(DebugFlag.Name) {

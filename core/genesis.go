@@ -47,7 +47,7 @@ import (
 
 var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 
-// use types.GenesisAccount instead (Deprecation not ported from latest Geth for now).
+// use types.Account instead (Deprecation not ported from latest Geth for now).
 type GenesisAccount = types.Account
 
 // use types.GenesisAlloc instead (Deprecation not ported from latest Geth for now).
@@ -195,7 +195,7 @@ func flushAlloc(ga *types.GenesisAlloc, db ethdb.Database, triedb *triedb.Databa
 	return nil
 }
 
-func getGenesisState(db ethdb.Database, blockhash common.Hash) (alloc GenesisAlloc, err error) {
+func getGenesisState(db ethdb.Database, blockhash common.Hash) (alloc types.GenesisAlloc, err error) {
 	blob := rawdb.ReadGenesisStateSpec(db, blockhash)
 	if len(blob) != 0 {
 		if err := alloc.UnmarshalJSON(blob); err != nil {
@@ -258,11 +258,13 @@ type ChainOverrides struct {
 	OverrideCancun *uint64
 	OverrideVerkle *uint64
 	// optimism
-	OverrideOptimismCanyon  *uint64
-	OverrideOptimismEcotone *uint64
-	OverrideOptimismFjord   *uint64
-	ApplySuperchainUpgrades bool
-	OverrideOptimismInterop *uint64
+	OverrideOptimismCanyon   *uint64
+	OverrideOptimismEcotone  *uint64
+	OverrideOptimismFjord    *uint64
+	OverrideOptimismGranite  *uint64
+	OverrideOptimismHolocene *uint64
+	OverrideOptimismInterop  *uint64
+	ApplySuperchainUpgrades  bool
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -318,8 +320,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 			if overrides != nil && overrides.OverrideOptimismCanyon != nil {
 				config.CanyonTime = overrides.OverrideOptimismCanyon
 				config.ShanghaiTime = overrides.OverrideOptimismCanyon
-				if config.Optimism != nil && config.Optimism.EIP1559DenominatorCanyon == 0 {
-					config.Optimism.EIP1559DenominatorCanyon = 250
+				if config.Optimism != nil && (config.Optimism.EIP1559DenominatorCanyon == nil || *config.Optimism.EIP1559DenominatorCanyon == 0) {
+					eip1559DenominatorCanyon := uint64(250)
+					config.Optimism.EIP1559DenominatorCanyon = &eip1559DenominatorCanyon
 				}
 			}
 			if overrides != nil && overrides.OverrideOptimismEcotone != nil {
@@ -328,6 +331,12 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 			}
 			if overrides != nil && overrides.OverrideOptimismFjord != nil {
 				config.FjordTime = overrides.OverrideOptimismFjord
+			}
+			if overrides != nil && overrides.OverrideOptimismGranite != nil {
+				config.GraniteTime = overrides.OverrideOptimismGranite
+			}
+			if overrides != nil && overrides.OverrideOptimismHolocene != nil {
+				config.HoloceneTime = overrides.OverrideOptimismHolocene
 			}
 			if overrides != nil && overrides.OverrideOptimismInterop != nil {
 				config.InteropTime = overrides.OverrideOptimismInterop
@@ -413,7 +422,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	if head == nil {
 		return newcfg, stored, errors.New("missing head header")
 	}
-	compatErr := storedcfg.CheckCompatible(newcfg, head.Number.Uint64(), head.Time)
+	var genesisTimestamp *uint64
+	if genesis != nil {
+		genesisTimestamp = &genesis.Timestamp
+	}
+	compatErr := storedcfg.CheckCompatible(newcfg, head.Number.Uint64(), head.Time, genesisTimestamp)
 	if compatErr != nil && ((head.Number.Uint64() != 0 && compatErr.RewindToBlock != 0) || (head.Time != 0 && compatErr.RewindToTime != 0)) {
 		return newcfg, stored, compatErr
 	}
@@ -544,7 +557,7 @@ func (g *Genesis) ToBlock() *types.Block {
 			}
 		}
 	}
-	return types.NewBlock(head, nil, nil, nil, trie.NewStackTrie(nil)).WithWithdrawals(withdrawals)
+	return types.NewBlock(head, &types.Body{Withdrawals: withdrawals}, nil, trie.NewStackTrie(nil))
 }
 
 // Commit writes the block and state of a genesis specification to the database.
@@ -652,7 +665,7 @@ func DeveloperGenesisBlock(gasLimit uint64, faucet *common.Address) *Genesis {
 		Config:     &config,
 		GasLimit:   gasLimit,
 		BaseFee:    big.NewInt(params.InitialBaseFee),
-		Difficulty: big.NewInt(1),
+		Difficulty: big.NewInt(0),
 		Alloc: map[common.Address]types.Account{
 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
@@ -663,6 +676,8 @@ func DeveloperGenesisBlock(gasLimit uint64, faucet *common.Address) *Genesis {
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
 			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
+			// Pre-deploy EIP-4788 system contract
+			params.BeaconRootsAddress: {Nonce: 1, Code: params.BeaconRootsCode, Balance: common.Big0},
 		},
 	}
 	if faucet != nil {

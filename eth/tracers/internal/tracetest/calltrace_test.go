@@ -27,7 +27,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -38,14 +37,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests"
 )
-
-type callContext struct {
-	Number     math.HexOrDecimal64   `json:"number"`
-	Difficulty *math.HexOrDecimal256 `json:"difficulty"`
-	Time       math.HexOrDecimal64   `json:"timestamp"`
-	GasLimit   math.HexOrDecimal64   `json:"gasLimit"`
-	Miner      common.Address        `json:"miner"`
-}
 
 // callLog is the result of LOG opCode
 type callLog struct {
@@ -105,6 +96,7 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 		if !strings.HasSuffix(file.Name(), ".json") {
 			continue
 		}
+
 		file := file // capture range variable
 		if file.Name() != "simple_onlytop.json" {
 			continue
@@ -128,17 +120,8 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 			// Configure a blockchain with the given prestate
 			var (
 				signer  = types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)), uint64(test.Context.Time))
-				context = vm.BlockContext{
-					CanTransfer: core.CanTransfer,
-					Transfer:    core.Transfer,
-					Coinbase:    test.Context.Miner,
-					BlockNumber: new(big.Int).SetUint64(uint64(test.Context.Number)),
-					Time:        uint64(test.Context.Time),
-					Difficulty:  (*big.Int)(test.Context.Difficulty),
-					GasLimit:    uint64(test.Context.GasLimit),
-					BaseFee:     test.Genesis.BaseFee,
-				}
-				state = tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
+				context = test.Context.toBlockContext(test.Genesis)
+				state   = tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
 			)
 			state.Close()
 
@@ -146,7 +129,6 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create call tracer: %v", err)
 			}
-
 			state.StateDB.SetLogger(tracer.Hooks)
 			msg, err := core.TransactionToMessage(tx, signer, context.BaseFee)
 			if err != nil {
@@ -382,6 +364,7 @@ func TestInternals(t *testing.T) {
 					},
 				}, false, rawdb.HashScheme)
 			defer state.Close()
+			state.StateDB.SetLogger(tc.tracer.Hooks)
 			tx, err := types.SignNewTx(key, signer, &types.LegacyTx{
 				To:       &to,
 				Value:    big.NewInt(0),
@@ -391,14 +374,10 @@ func TestInternals(t *testing.T) {
 			if err != nil {
 				t.Fatalf("test %v: failed to sign transaction: %v", tc.name, err)
 			}
-
-			state.StateDB.SetLogger(tc.tracer.Hooks)
-
 			txContext := vm.TxContext{
 				Origin:   origin,
 				GasPrice: tx.GasPrice(),
 			}
-
 			evm := vm.NewEVM(context, txContext, state.StateDB, config, vm.Config{Tracer: tc.tracer.Hooks})
 			msg, err := core.TransactionToMessage(tx, signer, big.NewInt(0))
 			if err != nil {

@@ -75,6 +75,11 @@ func (f callFrame) failed() bool {
 
 func (f *callFrame) processOutput(output []byte, err error, reverted bool) {
 	output = common.CopyBytes(output)
+	// Clear error if tx wasn't reverted. This happened
+	// for pre-homestead contract storage OOG.
+	if err != nil && !reverted {
+		err = nil
+	}
 	if err == nil {
 		f.Output = output
 		return
@@ -233,9 +238,9 @@ func (t *callTracer) OnTxEnd(receipt *types.Receipt, err error) {
 	}
 
 	if len(t.callstack) == 0 {
-		//return
 		panic(fmt.Sprintf("callstack empty %p, %d", t, receipt.GasUsed))
 	}
+
 	t.callstack[0].GasUsed = receipt.GasUsed
 	if t.config.WithLog {
 		// Logs are not emitted when the call fails
@@ -274,6 +279,8 @@ func (t *callTracer) GetResult() (json.RawMessage, error) {
 
 	if t.callstack[0].Type == vm.STOP {
 		t.callstack[0].Error = "failed deposit transaction"
+		t.callstack[0].To = nil
+		t.callstack[0].Gas = 0
 	}
 
 	res, err := json.Marshal(t.callstack[0])

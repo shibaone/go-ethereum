@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests"
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/sha3"
 )
@@ -39,6 +38,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 	state.StateDB.SetLogger(hooks)
 	state.StateDB.SetTxContext(tx.Hash(), 0)
 
+	// create body iwth trx and uncles
 	block := types.NewBlock(&types.Header{
 		ParentHash:       prestate.Genesis.ToBlock().Hash(),
 		Number:           context.BlockNumber,
@@ -48,7 +48,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 		GasLimit:         context.GasLimit,
 		BaseFee:          context.BaseFee,
 		ParentBeaconRoot: ptr(common.Hash{}),
-	}, []*types.Transaction{tx}, nil, nil, trie.NewStackTrie(nil))
+	}, &types.Body{Transactions: []*types.Transaction{tx}}, nil, nil)
 
 	hooks.OnBlockchainInit(prestate.Genesis.Config)
 	hooks.OnBlockStart(tracing.BlockEvent{
@@ -134,6 +134,6 @@ func (v ignoreValidateStateValidator) ValidateBody(block *types.Block) error {
 	return v.Validator.ValidateBody(block)
 }
 
-func (v ignoreValidateStateValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
+func (v ignoreValidateStateValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64, b bool) error {
 	return nil
 }

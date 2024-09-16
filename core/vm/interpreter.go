@@ -17,7 +17,7 @@
 package vm
 
 import (
-	"math/big"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -29,15 +29,18 @@ import (
 )
 
 // PrecompileOverrides is a function that can be used to override the default precompiled contracts
-type PrecompileOverrides func(params.Rules, PrecompiledContract, common.Address) (PrecompiledContract, bool)
+// Nil is returned when there is no precompile. The original is returned if the existing precompile should run.
+type PrecompileOverrides func(rules params.Rules, original PrecompiledContract, addr common.Address) PrecompiledContract
 
 // Config are the configuration options for the Interpreter
 type Config struct {
-	Tracer                      *tracing.Hooks
-	NoBaseFee                   bool                // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
-	EnablePreimageRecording     bool                // Enables recording of SHA3/keccak preimages
-	ExtraEips                   []int               // Additional EIPS that are to be enabled
-	OptimismPrecompileOverrides PrecompileOverrides // Precompile overrides for Optimism
+	Tracer                  *tracing.Hooks
+	NoBaseFee               bool  // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
+	EnablePreimageRecording bool  // Enables recording of SHA3/keccak preimages
+	ExtraEips               []int // Additional EIPS that are to be enabled
+	EnableWitnessCollection bool  // true if witness collection is enabled
+
+	PrecompileOverrides PrecompileOverrides // Precompiles can be swapped / changed / wrapped as needed
 }
 
 // ScopeContext contains the things that are per-call, such as stack and memory,
@@ -57,7 +60,7 @@ func (ctx *ScopeContext) MemoryData() []byte {
 	return ctx.Memory.Data()
 }
 
-// MemoryData returns the stack data. Callers must not modify the contents
+// StackData returns the stack data. Callers must not modify the contents
 // of the returned data.
 func (ctx *ScopeContext) StackData() []uint256.Int {
 	if ctx.Stack == nil {
@@ -77,8 +80,8 @@ func (ctx *ScopeContext) Address() common.Address {
 }
 
 // CallValue returns the value supplied with this call.
-func (ctx *ScopeContext) CallValue() *big.Int {
-	return ctx.Contract.Value().ToBig()
+func (ctx *ScopeContext) CallValue() *uint256.Int {
+	return ctx.Contract.Value()
 }
 
 // CallInput returns the input/calldata with this call. Callers must not modify
@@ -104,6 +107,9 @@ func NewEVMInterpreter(evm *EVM) *EVMInterpreter {
 	// If jump table was not initialised we set the default one.
 	var table *JumpTable
 	switch {
+	case evm.chainRules.IsVerkle:
+		// TODO replace with proper instruction set when fork is specified
+		table = &verkleInstructionSet
 	case evm.chainRules.IsCancun:
 		table = &cancunInstructionSet
 	case evm.chainRules.IsShanghai:
@@ -224,6 +230,14 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			// Capture pre-execution values for tracing.
 			logged, pcCopy, gasCopy = false, pc, contract.Gas
 		}
+
+		if in.evm.chainRules.IsEIP4762 && !contract.IsDeployment {
+			// if the PC ends up in a new "chunk" of verkleized code, charge the
+			// associated costs.
+			contractAddr := contract.Address()
+			contract.Gas -= in.evm.TxContext.AccessEvents.CodeChunksRangeGas(contractAddr, pc, 1, uint64(len(contract.Code)), false)
+		}
+
 		// Get the operation from the jump table and validate the stack to ensure there are
 		// enough stack items available to perform the operation.
 		op = contract.GetOp(pc)
@@ -262,7 +276,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // for tracing
-			if err != nil || !contract.UseGas(dynamicCost, in.evm.Config.Tracer, tracing.GasChangeIgnored) {
+			if err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrOutOfGas, err)
+			}
+			if !contract.UseGas(dynamicCost, in.evm.Config.Tracer, tracing.GasChangeIgnored) {
 				return nil, ErrOutOfGas
 			}
 

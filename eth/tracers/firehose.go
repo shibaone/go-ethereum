@@ -105,12 +105,6 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		OnLog:             tracer.OnLog,
 		OnSystemCallStart: tracer.OnBeaconBlockRootStart,
 		OnSystemCallEnd:   tracer.OnBeaconBlockRootEnd,
-
-		// This should actually be conditional but it's not possible to do it in the hooks
-		// directly because the chain ID will be known only after the `OnBlockchainInit` call.
-		// So we register it unconditionally and the actual `OnNewAccount` hook will decide
-		// what it needs to do.
-		OnNewAccount: tracer.OnNewAccount,
 	}
 }
 
@@ -1322,7 +1316,7 @@ func (f *Firehose) OnNewAccount(a common.Address, previousDataExists bool) {
 		return
 	}
 
-	if call := f.callStack.Peek(); call != nil && call.CallType == pbeth.CallType_STATIC && f.blockIsPrecompiledAddr(common.Address(call.Address)) {
+	if call := f.callStack.Peek(); call != nil && call.CallType == pbeth.CallType_STATIC && f.blockIsPrecompiledAddr(common.BytesToAddress(call.Address)) {
 		// Old Firehose ignore those, we do the same
 		return
 	}
@@ -1782,7 +1776,7 @@ var balanceChangeReasonToPb = map[tracing.BalanceChangeReason]pbeth.BalanceChang
 	tracing.BalanceDecreaseSelfdestruct:         pbeth.BalanceChange_REASON_SUICIDE_WITHDRAW,
 	tracing.BalanceDecreaseSelfdestructBurn:     pbeth.BalanceChange_REASON_BURN,
 	tracing.BalanceIncreaseWithdrawal:           pbeth.BalanceChange_REASON_WITHDRAWAL,
-	tracing.BalanceIncreaseMint:                 pbeth.BalanceChange_REASON_INCREASE_MINT,
+	tracing.BalanceMint:                         pbeth.BalanceChange_REASON_INCREASE_MINT,
 
 	tracing.BalanceChangeUnspecified: pbeth.BalanceChange_REASON_UNKNOWN,
 }

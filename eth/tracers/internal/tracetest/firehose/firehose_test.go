@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,11 +48,11 @@ func TestFirehoseChain(t *testing.T) {
 		Time:       context.Time,
 		GasLimit:   context.GasLimit,
 		BaseFee:    context.BaseFee,
-	}, nil, nil, nil, trie.NewStackTrie(nil))
+	}, nil, nil, nil)
 
 	blockchain.SetBlockValidatorAndProcessorForTesting(
-		ignoreValidateStateValidator{core.NewBlockValidator(genesis.Config, blockchain, blockchain.Engine())},
-		core.NewStateProcessor(genesis.Config, blockchain, blockchain.Engine()),
+		ignoreValidateStateValidator{core.NewBlockValidator(genesis.Config, blockchain)},
+		core.NewStateProcessor(genesis.Config, blockchain.HeaderChain()),
 	)
 
 	n, err := blockchain.InsertChain(types.Blocks{block})

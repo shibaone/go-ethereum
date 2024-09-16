@@ -32,7 +32,7 @@ type OpContext interface {
 	StackData() []uint256.Int
 	Caller() common.Address
 	Address() common.Address
-	CallValue() *big.Int
+	CallValue() *uint256.Int
 	CallInput() []byte
 }
 
@@ -81,6 +81,10 @@ type (
 	TxEndHook = func(receipt *types.Receipt, err error)
 
 	// EnterHook is invoked when the processing of a message starts.
+	//
+	// Take note that EnterHook, when in the context of a live tracer, can be invoked
+	// outside of the `OnTxStart` and `OnTxEnd` hooks when dealing with system calls,
+	// see [OnSystemCallStartHook] and [OnSystemCallEndHook] for more information.
 	EnterHook = func(depth int, typ byte, from common.Address, to common.Address, input []byte, gas uint64, value *big.Int)
 
 	// ExitHook is invoked when the processing of a message ends.
@@ -89,6 +93,10 @@ type (
 	// ran out of gas when attempting to persist the code to database did not
 	// count as a call failure and did not cause a revert of the call. This will
 	// be indicated by `reverted == false` and `err == ErrCodeStoreOutOfGas`.
+	//
+	// Take note that ExitHook, when in the context of a live tracer, can be invoked
+	// outside of the `OnTxStart` and `OnTxEnd` hooks when dealing with system calls,
+	// see [OnSystemCallStartHook] and [OnSystemCallEndHook] for more information.
 	ExitHook = func(depth int, output []byte, gasUsed uint64, err error, reverted bool)
 
 	// OpcodeHook is invoked just prior to the execution of an opcode.
@@ -179,25 +187,19 @@ type Hooks struct {
 	OnGenesisBlock    GenesisBlockHook
 	OnSystemCallStart OnSystemCallStartHook
 	OnSystemCallEnd   OnSystemCallEndHook
-
 	// State events
 	OnBalanceChange BalanceChangeHook
 	OnNonceChange   NonceChangeHook
 	OnCodeChange    CodeChangeHook
 	OnStorageChange StorageChangeHook
 	OnLog           LogHook
-
-	// Firehose backward compatibility
-	// This hook exist because some current Firehose supported chains requires it
-	// but this field is going to be deprecated and newer chains will not produced
-	// those events anymore. The hook is registered conditionally based on the
-	// tracer configuration.
-	OnNewAccount func(address common.Address, previousExisted bool)
 }
 
 // BalanceChangeReason is used to indicate the reason for a balance change, useful
 // for tracing and reporting.
 type BalanceChangeReason byte
+
+//go:generate go run golang.org/x/tools/cmd/stringer -type=BalanceChangeReason -output gen_balance_change_reason_stringer.go
 
 const (
 	BalanceChangeUnspecified BalanceChangeReason = 0
@@ -243,7 +245,8 @@ const (
 	// Note it doesn't account for a self-destruct which appoints itself as recipient.
 	BalanceDecreaseSelfdestructBurn BalanceChangeReason = 14
 
-	BalanceIncreaseMint BalanceChangeReason = 15
+	// OP-Geth specific
+	BalanceMint BalanceChangeReason = 200
 )
 
 // GasChangeReason is used to indicate the reason for a gas change, useful
@@ -300,6 +303,12 @@ const (
 	GasChangeCallStorageColdAccess GasChangeReason = 13
 	// GasChangeCallFailedExecution is the burning of the remaining gas when the execution failed without a revert.
 	GasChangeCallFailedExecution GasChangeReason = 14
+	// GasChangeWitnessContractInit is the amount charged for adding to the witness during the contract creation initialization step
+	GasChangeWitnessContractInit GasChangeReason = 15
+	// GasChangeWitnessContractCreation is the amount charged for adding to the witness during the contract creation finalization step
+	GasChangeWitnessContractCreation GasChangeReason = 16
+	// GasChangeWitnessCodeChunk is the amount charged for touching one or more contract code chunks
+	GasChangeWitnessCodeChunk GasChangeReason = 17
 
 	// GasChangeIgnored is a special value that can be used to indicate that the gas change should be ignored as
 	// it will be "manually" tracked by a direct emit of the gas change event.

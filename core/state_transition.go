@@ -68,7 +68,7 @@ func (result *ExecutionResult) Revert() []byte {
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028, isEIP3860 bool) (uint64, error) {
+func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation, isHomestead, isEIP2028, isEIP3860 bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
 	if isContractCreation && isHomestead {
@@ -248,7 +248,7 @@ func (st *StateTransition) to() common.Address {
 
 func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).SetUint64(st.msg.GasLimit)
-	mgval = mgval.Mul(mgval, st.msg.GasPrice)
+	mgval.Mul(mgval, st.msg.GasPrice)
 	var l1Cost *big.Int
 	if st.evm.Context.L1CostFunc != nil && !st.msg.SkipAccountChecks {
 		l1Cost = st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time)
@@ -260,11 +260,12 @@ func (st *StateTransition) buyGas() error {
 	if st.msg.GasFeeCap != nil {
 		balanceCheck.SetUint64(st.msg.GasLimit)
 		balanceCheck = balanceCheck.Mul(balanceCheck, st.msg.GasFeeCap)
-		balanceCheck.Add(balanceCheck, st.msg.Value)
-		if l1Cost != nil {
-			balanceCheck.Add(balanceCheck, l1Cost)
-		}
 	}
+	balanceCheck.Add(balanceCheck, st.msg.Value)
+	if l1Cost != nil {
+		balanceCheck.Add(balanceCheck, l1Cost)
+	}
+
 	if st.evm.ChainConfig().IsCancun(st.evm.Context.BlockNumber, st.evm.Context.Time) {
 		if blobGas := st.blobGasUsed(); blobGas > 0 {
 			// Check that the user has enough funds to cover blobGasUsed * tx.BlobGasFeeCap
@@ -292,7 +293,7 @@ func (st *StateTransition) buyGas() error {
 		st.evm.Config.Tracer.OnGasChange(0, st.msg.GasLimit, tracing.GasChangeTxInitialBalance)
 	}
 
-	st.gasRemaining += st.msg.GasLimit
+	st.gasRemaining = st.msg.GasLimit
 
 	st.initialGas = st.msg.GasLimit
 	mgvalU256, _ := uint256.FromBig(mgval)
@@ -414,7 +415,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("mint value exceeds uint256: %d", mintU256)
 		}
-		st.state.AddBalance(st.msg.From, mintU256, tracing.BalanceIncreaseMint)
+		st.state.AddBalance(st.msg.From, mintU256, tracing.BalanceMint)
 	}
 	snap := st.state.Snapshot()
 
@@ -422,6 +423,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// Failed deposits must still be included. Unless we cannot produce the block at all due to the gas limit.
 	// On deposit failure, we rewind any state changes from after the minting, and increment the nonce.
 	if err != nil && err != ErrGasLimitReached && st.msg.IsDepositTx {
+		if st.evm.Config.Tracer != nil && st.evm.Config.Tracer.OnEnter != nil {
+			st.evm.Config.Tracer.OnEnter(0, byte(vm.STOP), common.Address{}, common.Address{}, nil, 0, nil)
+		}
+
 		st.state.RevertToSnapshot(snap)
 		// Even though we revert the state changes, always increment the nonce for the next deposit transaction
 		st.state.SetNonce(st.msg.From, st.state.GetNonce(st.msg.From)+1)
@@ -475,9 +480,24 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gasRemaining, gas)
 	}
 	if t := st.evm.Config.Tracer; t != nil && t.OnGasChange != nil {
+		if st.msg.IsDepositTx {
+			t.OnGasChange(st.gasRemaining, 0, tracing.GasChangeTxIntrinsicGas)
+		} else {
+			t.OnGasChange(st.gasRemaining, st.gasRemaining-gas, tracing.GasChangeTxIntrinsicGas)
+		}
+	}
+	if t := st.evm.Config.Tracer; t != nil && t.OnGasChange != nil {
 		t.OnGasChange(st.gasRemaining, st.gasRemaining-gas, tracing.GasChangeTxIntrinsicGas)
 	}
 	st.gasRemaining -= gas
+
+	if rules.IsEIP4762 {
+		st.evm.AccessEvents.AddTxOrigin(msg.From)
+
+		if targetAddr := msg.To; targetAddr != nil {
+			st.evm.AccessEvents.AddTxDestination(*targetAddr, msg.Value.Sign() != 0)
+		}
+	}
 
 	// Check clause 6
 	value, overflow := uint256.FromBig(msg.Value)
@@ -559,6 +579,11 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		fee := new(uint256.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTipU256)
 		st.state.AddBalance(st.evm.Context.Coinbase, fee, tracing.BalanceIncreaseRewardTransactionFee)
+
+		// add the coinbase to the witness iff the fee is greater than 0
+		if rules.IsEIP4762 && fee.Sign() != 0 {
+			st.evm.AccessEvents.BalanceGas(st.evm.Context.Coinbase, true)
+		}
 	}
 
 	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
@@ -602,7 +627,7 @@ func (st *StateTransition) refundGas(refundQuotient uint64) uint64 {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := uint256.NewInt(st.gasRemaining)
-	remaining = remaining.Mul(remaining, uint256.MustFromBig(st.msg.GasPrice))
+	remaining.Mul(remaining, uint256.MustFromBig(st.msg.GasPrice))
 	st.state.AddBalance(st.msg.From, remaining, tracing.BalanceIncreaseGasReturn)
 
 	if st.evm.Config.Tracer != nil && st.evm.Config.Tracer.OnGasChange != nil && st.gasRemaining > 0 {
