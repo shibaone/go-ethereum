@@ -64,7 +64,6 @@
           "gasChanges":  [
             {
               "oldValue":  "1000000",
-              "newValue":  "977432",
               "reason":  "REASON_INTRINSIC_GAS",
               "ordinal":  "2"
             },

@@ -486,9 +486,6 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 			t.OnGasChange(st.gasRemaining, st.gasRemaining-gas, tracing.GasChangeTxIntrinsicGas)
 		}
 	}
-	if t := st.evm.Config.Tracer; t != nil && t.OnGasChange != nil {
-		t.OnGasChange(st.gasRemaining, st.gasRemaining-gas, tracing.GasChangeTxIntrinsicGas)
-	}
 	st.gasRemaining -= gas
 
 	if rules.IsEIP4762 {

@@ -2,7 +2,8 @@ package firehose_test
 
 import (
 	"fmt"
-	"hash"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/trie"
 	"math/big"
 	"os"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -19,7 +19,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/sha3"
 )
 
 func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
@@ -48,7 +47,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 		GasLimit:         context.GasLimit,
 		BaseFee:          context.BaseFee,
 		ParentBeaconRoot: ptr(common.Hash{}),
-	}, &types.Body{Transactions: []*types.Transaction{tx}}, nil, nil)
+	}, &types.Body{Transactions: []*types.Transaction{tx}}, nil, trie.NewStackTrie(nil))
 
 	hooks.OnBlockchainInit(prestate.Genesis.Config)
 	hooks.OnBlockStart(tracing.BlockEvent{
@@ -95,35 +94,6 @@ func newBlockchain(t *testing.T, alloc types.GenesisAlloc, context vm.BlockConte
 	require.NoError(t, err)
 
 	return genesis, blockchain
-}
-
-// testHasher is the helper tool for transaction/receipt list hashing.
-// The original hasher is trie, in order to get rid of import cycle,
-// use the testing hasher instead.
-type testHasher struct {
-	hasher hash.Hash
-}
-
-// NewHasher returns a new testHasher instance.
-func NewHasher() *testHasher {
-	return &testHasher{hasher: sha3.NewLegacyKeccak256()}
-}
-
-// Reset resets the hash state.
-func (h *testHasher) Reset() {
-	h.hasher.Reset()
-}
-
-// Update updates the hash state with the given key and value.
-func (h *testHasher) Update(key, val []byte) error {
-	h.hasher.Write(key)
-	h.hasher.Write(val)
-	return nil
-}
-
-// Hash returns the hash value.
-func (h *testHasher) Hash() common.Hash {
-	return common.BytesToHash(h.hasher.Sum(nil))
 }
 
 type ignoreValidateStateValidator struct {
