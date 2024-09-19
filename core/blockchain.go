@@ -1913,6 +1913,7 @@ type blockProcessingResult struct {
 func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool) (_ *blockProcessingResult, blockEndErr error) {
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		td := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+		fmt.Println("DOUDOU: finalized block event", bc.CurrentFinalBlock())
 		bc.logger.OnBlockStart(tracing.BlockEvent{
 			Block:     block,
 			TD:        td,
