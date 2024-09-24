@@ -65,29 +65,29 @@ jobs:
       #     CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags "-X main.gitCommit=$GIT_COMMIT -X main.gitDate=$GIT_COMMIT_DATE -extldflags=-static" -o ./build/bin/geth-linux-arm64 -a ./cmd/geth
 
       - name: Upload Linux Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.3.3
         if: matrix.os == 'ubuntu-20.04'
         with:
           name: linux
           path: ./build/bin/geth
 
       - name: Upload MacOS Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.3.3
         if: matrix.os == 'macos-latest'
         with:
           name: macos
           path: ./build/bin/geth
 
       # - name: Upload Windows Build
-      #   uses: actions/upload-artifact@v3
+      #   uses: actions/upload-artifact@v4.3.3
       #   if: matrix.os == 'windows-latest'
       #   with:
       #     name: windows
       #     path: ./build/bin/geth.exe
 
       # - name: Upload ARM-64 Build
-      #   uses: actions/upload-artifact@v3
-      #   if: matrix.os == 'ubuntu-20.04'
+      #   uses: actions/upload-artifact@v4.3.3
+      #   if: matrix.os == 'ubuntu-latest'
       #   with:
       #     name: arm64
       #     path: ./build/bin/geth-linux-arm64
@@ -104,29 +104,39 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4.1.7
         with:
           name: linux
           path: ./linux
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4.1.7
         with:
           name: macos
           path: ./macos
 
       # - name: Download Artifacts
-      #   uses: actions/download-artifact@v3
+      #   uses: actions/download-artifact@v4.1.7
       #   with:
       #     name: windows
       #     path: ./windows
 
       # - name: Download Artifacts
-      #   uses: actions/download-artifact@v3
+      #   uses: actions/download-artifact@v4.1.7
       #   with:
       #     name: arm64
       #     path: ./arm64
 
+      # - name: Download Config File
+      #   run: |
+      #     . ./.github/release.env
+      #     echo "mainnet.zip url: $MAINNET_FILE_URL"
+      #     echo "testnet.zip url: $TESTNET_FILE_URL"
+      #     curl -L $MAINNET_FILE_URL -o ./mainnet.zip
+      #     curl -L $TESTNET_FILE_URL -o ./testnet.zip
+      # ==============================
+      #       Create release
+      # ==============================
       - name: Generate Change Log
         id: changelog
         run: |
@@ -146,13 +156,12 @@ jobs:
       - run: ls
 
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         with:
-          tag_name: ${{ env.RELEASE_VERSION }}
-          release_name: ${{ env.RELEASE_VERSION }}
+          tag_name: ${{ env.RELEASE_VERSION}}
+          release_name: ${{ env.RELEASE_VERSION}}
           body: |
             ${{ env.CHANGELOG }}
           draft: false
@@ -160,5 +169,8 @@ jobs:
           files: |
             ./linux/geth_linux
             ./macos/geth_macos
-          # ./arm64/geth-linux-arm64
+
+          # ./mainnet.zip
+          # ./testnet.zip
           # ./windows/geth_windows.exe
+          # ./arm64/geth-linux-arm64

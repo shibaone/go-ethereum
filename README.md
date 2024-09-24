@@ -11,16 +11,15 @@ https://pkg.go.dev/badge/github.com/ethereum/go-ethereum
 )](https://pkg.go.dev/github.com/ethereum/go-ethereum?tab=doc)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/z2VpC455eU)
 
-But from that baseline of EVM compatible, BNB Smart Chain introduces  a system of 21 validators with Proof of Staked Authority (PoSA) consensus that can support short block time and lower fees. The most bonded validator candidates of staking will become validators and produce blocks. The double-sign detection and other slashing logic guarantee security, stability, and chain finality.
+But from that baseline of EVM compatible, BNB Smart Chain introduces a system of 21 validators with Proof of Staked Authority (PoSA) consensus that can support short block time and lower fees. The most bonded validator candidates of staking will become validators and produce blocks. The double-sign detection and other slashing logic guarantee security, stability, and chain finality.
 
-Cross-chain transfer and other communication are possible due to native support of interoperability. Relayers and on-chain contracts are developed to support that. BNB Beacon Chain DEX remains a liquid venue of the exchange of assets on both chains. This dual-chain architecture will be ideal for users to take advantage of the fast trading on one side and build their decentralized apps on the other side. **The BNB Smart Chain** will be:
+**The BNB Smart Chain** will be:
 
 - **A self-sovereign blockchain**: Provides security and safety with elected validators.
 - **EVM-compatible**: Supports all the existing Ethereum tooling along with faster finality and cheaper transaction fees.
-- **Interoperable**: Comes with efficient native dual chain communication; Optimized for scaling high-performance dApps that require fast and smooth user experience.
 - **Distributed with on-chain governance**: Proof of Staked Authority brings in decentralization and community participants. As the native token, BNB will serve as both the gas of smart contract execution and tokens for staking.
 
-More details in [White Paper](https://www.bnbchain.org/en#smartChain).
+More details in [White Paper](https://github.com/bnb-chain/whitepaper/blob/master/WHITEPAPER.md).
 
 ## Key features
 
@@ -36,18 +35,8 @@ To combine DPoS and PoA for consensus, BNB Smart Chain implement a novel consens
 
 1. Blocks are produced by a limited set of validators.
 2. Validators take turns to produce blocks in a PoA manner, similar to Ethereum's Clique consensus engine.
-3. Validator set are elected in and out based on a staking based governance on BNB Beacon Chain.
-4. The validator set change is relayed via a cross-chain communication mechanism.
-5. Parlia consensus engine will interact with a set of [system contracts](https://docs.bnbchain.org/bnb-smart-chain/staking/overview/#system-contracts) to achieve liveness slash, revenue distributing and validator set renewing func.
-
-
-### Light Client of BNB Beacon Chain
-
-To achieve the cross-chain communication from BNB Beacon Chain to BNB Smart Chain, need introduce a on-chain light client verification algorithm.
-It contains two parts:
-
-1. [Stateless Precompiled contracts](https://github.com/bnb-chain/bsc/blob/master/core/vm/contracts_lightclient.go) to do tendermint header verification and Merkle Proof verification.
-2. [Stateful solidity contracts](https://github.com/bnb-chain/bsc-genesis-contract/blob/master/contracts/TendermintLightClient.sol) to store validator set and trusted appHash.
+3. Validator set are elected in and out based on a staking based governance on BNB Smart Chain.
+4. Parlia consensus engine will interact with a set of [system contracts](https://docs.bnbchain.org/bnb-smart-chain/staking/overview/#system-contracts) to achieve liveness slash, revenue distributing and validator set renewing func.
 
 ## Native Token
 
@@ -55,7 +44,6 @@ BNB will run on BNB Smart Chain in the same way as ETH runs on Ethereum so that 
 BNB will be used to:
 
 1. pay `gas` to deploy or invoke Smart Contract on BSC
-2. perform cross-chain operations, such as transfer token assets across BNB Smart Chain and BNB Beacon Chain.
 
 ## Building the source
 
@@ -82,7 +70,7 @@ Caught SIGILL in blst_cgo_init, consult <blst>/bindinds/go/README.md.
 ```
 please try to add the following environment variables and build again:
 ```shell
-export CGO_CFLAGS="-O -D__BLST_PORTABLE__" 
+export CGO_CFLAGS="-O -D__BLST_PORTABLE__"
 export CGO_CFLAGS_ALLOW="-O -D__BLST_PORTABLE__"
 ```
 
@@ -159,7 +147,7 @@ Download latest chaindata snapshot from [here](https://github.com/bnb-chain/bsc-
 ## It will run with Hash-Base Storage Scheme by default
 ./geth --config ./config.toml --datadir ./node  --cache 8000 --rpc.allow-unprotected-txs --history.transactions 0 --tries-verify-mode none
 
-## It runs fullnode with Path-Base Storage Scheme. 
+## It runs fullnode with Path-Base Storage Scheme.
 ## It will enable inline state prune, keeping the latest 90000 blocks' history state by default.
 ./geth --config ./config.toml --datadir ./node  --cache 8000 --rpc.allow-unprotected-txs --history.transactions 0 --tries-verify-mode none --state.scheme path
 ```
@@ -249,13 +237,11 @@ running web servers, so malicious web pages could try to subvert locally availab
 APIs!**
 
 ### Operating a private network
-- [BSC-Deploy](https://github.com/bnb-chain/node-deploy/): deploy tool for setting up both BNB Beacon Chain, BNB Smart Chain and the cross chain infrastructure between them.
-- [BSC-Docker](https://github.com/bnb-chain/bsc-docker): deploy tool for setting up local BSC cluster in container.
-
+- [BSC-Deploy](https://github.com/bnb-chain/node-deploy/): deploy tool for setting up BNB Smart Chain.
 
 ## Running a bootnode
 
-Bootnodes are super-lightweight nodes that are not behind a NAT and are running just discovery protocol. When you start up a node it should log your enode, which is a public identifier that others can use to connect to your node. 
+Bootnodes are super-lightweight nodes that are not behind a NAT and are running just discovery protocol. When you start up a node it should log your enode, which is a public identifier that others can use to connect to your node.
 
 First the bootnode requires a key, which can be created with the following command, which will save a key to boot.key:
 
@@ -269,7 +255,7 @@ This key can then be used to generate a bootnode as follows:
 bootnode -nodekey boot.key -addr :30311 -network bsc
 ```
 
-The choice of port passed to -addr is arbitrary. 
+The choice of port passed to -addr is arbitrary.
 The bootnode command returns the following logs to the terminal, confirming that it is running:
 
 ```

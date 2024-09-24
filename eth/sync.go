@@ -246,7 +246,7 @@ func (h *handler) doSync(op *chainSyncOp) error {
 	}
 
 	// Run the sync cycle, and disable snap sync if we're past the pivot block
-	err := h.downloader.LegacySync(op.peer.ID(), op.head, op.td, h.chain.Config().TerminalTotalDifficulty, op.mode)
+	err := h.downloader.LegacySync(op.peer.ID(), op.head, op.peer.Name(), op.td, h.chain.Config().TerminalTotalDifficulty, op.mode)
 	if err != nil {
 		return err
 	}
@@ -261,6 +261,9 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
 		if block := h.chain.GetBlock(head.Hash(), head.Number.Uint64()); block != nil {
+			if h.chain.Config().IsCancun(block.Number(), block.Time()) {
+				block = block.WithSidecars(h.chain.GetSidecarsByHash(block.Hash()))
+			}
 			h.BroadcastBlock(block, false)
 		}
 	}
