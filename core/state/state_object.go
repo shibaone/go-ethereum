@@ -554,9 +554,10 @@ func (s *stateObject) CodeSize() int {
 }
 
 func (s *stateObject) SetCode(codeHash common.Hash, code []byte) {
+	prevCode := s.Code()
 	s.db.journal.setCode(s.address)
 	if s.db.logger != nil && s.db.logger.OnCodeChange != nil {
-		s.db.logger.OnCodeChange(s.address, common.BytesToHash(s.CodeHash()), prevcode, codeHash, code)
+		s.db.logger.OnCodeChange(s.address, common.BytesToHash(s.CodeHash()), prevCode, codeHash, code)
 	}
 	s.setCode(codeHash, code)
 }

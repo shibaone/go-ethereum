@@ -918,8 +918,6 @@ func TestCommitCopy(t *testing.T) {
 	if val := copied.GetState(addr, skey1); val != sval1 {
 		t.Fatalf("unexpected storage slot: have %x", val)
 	}
-	if !errors.Is(copied.Error(), trie.ErrCommitted) {
-		t.Fatalf("unexpected state error, %v", copied.Error())
 	if val := copied.GetCommittedState(addr, skey1); val != sval1 {
 		t.Fatalf("unexpected storage slot: have %x", val)
 	}

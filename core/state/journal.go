@@ -332,14 +332,6 @@ func (ch selfDestructChange) copy() journalEntry {
 	}
 }
 
-func (ch selfDestructChange) copy() journalEntry {
-	return selfDestructChange{
-		account:     ch.account,
-		prev:        ch.prev,
-		prevbalance: new(uint256.Int).Set(ch.prevbalance),
-	}
-}
-
 var ripemd = common.HexToAddress("0000000000000000000000000000000000000003")
 
 func (ch touchChange) revert(s *StateDB) {
@@ -355,25 +347,12 @@ func (ch touchChange) copy() journalEntry {
 	}
 }
 
-func (ch touchChange) copy() journalEntry {
-	return touchChange{
-		account: ch.account,
-	}
-}
-
 func (ch balanceChange) revert(s *StateDB) {
 	s.getStateObject(ch.account).setBalance(ch.prev)
 }
 
 func (ch balanceChange) dirtied() *common.Address {
 	return &ch.account
-}
-
-func (ch balanceChange) copy() journalEntry {
-	return balanceChange{
-		account: ch.account,
-		prev:    new(uint256.Int).Set(ch.prev),
-	}
 }
 
 func (ch balanceChange) copy() journalEntry {
@@ -398,13 +377,6 @@ func (ch nonceChange) copy() journalEntry {
 	}
 }
 
-func (ch nonceChange) copy() journalEntry {
-	return nonceChange{
-		account: ch.account,
-		prev:    ch.prev,
-	}
-}
-
 func (ch codeChange) revert(s *StateDB) {
 	s.getStateObject(ch.account).setCode(types.EmptyCodeHash, nil)
 }
@@ -417,28 +389,12 @@ func (ch codeChange) copy() journalEntry {
 	return codeChange{account: ch.account}
 }
 
-func (ch codeChange) copy() journalEntry {
-	return codeChange{
-		account:  ch.account,
-		prevhash: common.CopyBytes(ch.prevhash),
-		prevcode: common.CopyBytes(ch.prevcode),
-	}
-}
-
 func (ch storageChange) revert(s *StateDB) {
 	s.getStateObject(ch.account).setState(ch.key, ch.prevvalue, ch.origvalue)
 }
 
 func (ch storageChange) dirtied() *common.Address {
 	return &ch.account
-}
-
-func (ch storageChange) copy() journalEntry {
-	return storageChange{
-		account:   ch.account,
-		key:       ch.key,
-		prevvalue: ch.prevvalue,
-	}
 }
 
 func (ch storageChange) copy() journalEntry {
@@ -496,12 +452,6 @@ func (ch addLogChange) dirtied() *common.Address {
 func (ch addLogChange) copy() journalEntry {
 	return addLogChange{
 		txhash: ch.txhash,
-	}
-}
-
-func (ch addPreimageChange) copy() journalEntry {
-	return addPreimageChange{
-		hash: ch.hash,
 	}
 }
 

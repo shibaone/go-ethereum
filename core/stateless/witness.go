@@ -17,16 +17,13 @@
 package stateless
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // HeaderReader is an interface to pull in headers in place of block hashes for
@@ -114,39 +111,6 @@ func (w *Witness) Copy() *Witness {
 		cpy.context = types.CopyHeader(w.context)
 	}
 	return cpy
-}
-
-// String prints a human-readable summary containing the total size of the
-// witness and the sizes of the underlying components
-func (w *Witness) String() string {
-	blob, _ := rlp.EncodeToBytes(w)
-	bytesTotal := len(blob)
-
-	blob, _ = rlp.EncodeToBytes(w.Block)
-	bytesBlock := len(blob)
-
-	bytesHeaders := 0
-	for _, header := range w.Headers {
-		blob, _ = rlp.EncodeToBytes(header)
-		bytesHeaders += len(blob)
-	}
-	bytesCodes := 0
-	for code := range w.Codes {
-		bytesCodes += len(code)
-	}
-	bytesState := 0
-	for node := range w.State {
-		bytesState += len(node)
-	}
-	buf := new(bytes.Buffer)
-
-	fmt.Fprintf(buf, "Witness #%d: %v\n", w.Block.Number(), common.StorageSize(bytesTotal))
-	fmt.Fprintf(buf, "     block (%4d txs):  %10v\n", len(w.Block.Transactions()), common.StorageSize(bytesBlock))
-	fmt.Fprintf(buf, "%4d headers:      %10v\n", len(w.Headers), common.StorageSize(bytesHeaders))
-	fmt.Fprintf(buf, "%4d trie nodes:   %10v\n", len(w.State), common.StorageSize(bytesState))
-	fmt.Fprintf(buf, "%4d codes:        %10v\n", len(w.Codes), common.StorageSize(bytesCodes))
-
-	return buf.String()
 }
 
 // Root returns the pre-state root from the first header.

@@ -41,34 +41,10 @@ import (
 	"github.com/ethereum/go-ethereum/trie/triestate"
 	"github.com/ethereum/go-ethereum/trie/utils"
 	"github.com/holiman/uint256"
-	"golang.org/x/sync/errgroup"
 )
 
 // TriesInMemory represents the number of layers that are kept in RAM.
 const TriesInMemory = 128
-
-type revision struct {
-	id           int
-	journalIndex int
-type mutationType int
-
-const (
-	update mutationType = iota
-	deletion
-)
-
-type mutation struct {
-	typ     mutationType
-	applied bool
-}
-
-func (m *mutation) copy() *mutation {
-	return &mutation{typ: m.typ, applied: m.applied}
-}
-
-func (m *mutation) isDelete() bool {
-	return m.typ == deletion
-}
 
 type mutationType int
 
@@ -174,9 +150,6 @@ type StateDB struct {
 	StorageCommits  time.Duration
 	SnapshotCommits time.Duration
 	TrieDBCommits   time.Duration
-
-	// State witness if cross validation is needed
-	witness *stateless.Witness
 
 	AccountLoaded  int          // Number of accounts retrieved from the database during the state transition
 	AccountUpdated int          // Number of accounts updated during the state transition

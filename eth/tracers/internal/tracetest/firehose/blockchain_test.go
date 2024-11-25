@@ -2,11 +2,12 @@ package firehose_test
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/trie"
 	"math/big"
 	"os"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -90,7 +91,7 @@ func newBlockchain(t *testing.T, alloc types.GenesisAlloc, context vm.BlockConte
 
 	blockchain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), core.DefaultCacheConfigWithScheme(rawdb.HashScheme), genesis, nil, ethash.NewFullFaker(), vm.Config{
 		Tracer: tracer,
-	}, nil, nil)
+	}, nil)
 	require.NoError(t, err)
 
 	return genesis, blockchain
@@ -104,6 +105,6 @@ func (v ignoreValidateStateValidator) ValidateBody(block *types.Block) error {
 	return v.Validator.ValidateBody(block)
 }
 
-func (v ignoreValidateStateValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64, b bool) error {
+func (v ignoreValidateStateValidator) ValidateState(block *types.Block, statedb *state.StateDB, res *core.ProcessResult, stateless bool) error {
 	return nil
 }

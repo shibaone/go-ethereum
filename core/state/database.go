@@ -64,9 +64,6 @@ type Database interface {
 	// PointCache returns the cache holding points used in verkle tree key computation
 	PointCache() *utils.PointCache
 
-	// PointCache returns the cache holding points used in verkle tree key computation
-	PointCache() *utils.PointCache
-
 	// TrieDB returns the underlying trie database for managing trie nodes.
 	TrieDB() *triedb.Database
 
