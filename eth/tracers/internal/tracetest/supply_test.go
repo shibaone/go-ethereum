@@ -154,6 +154,7 @@ func TestSupplyRewards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to test supply tracer: %v", err)
 	}
+
 	actual := out[expected.Number]
 
 	compareAsJSON(t, expected, actual)
@@ -556,7 +557,7 @@ func testSupplyTracer(t *testing.T, genesis *core.Genesis, gen func(*core.BlockG
 		return nil, nil, fmt.Errorf("failed to create call tracer: %v", err)
 	}
 
-	chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), core.DefaultCacheConfigWithScheme(rawdb.PathScheme), genesis, nil, engine, vm.Config{Tracer: tracer}, nil, nil)
+	chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), core.DefaultCacheConfigWithScheme(rawdb.PathScheme), genesis, nil, engine, vm.Config{Tracer: tracer}, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create tester chain: %v", err)
 	}

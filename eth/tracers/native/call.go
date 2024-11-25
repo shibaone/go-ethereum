@@ -227,6 +227,9 @@ func (t *callTracer) OnTxEnd(receipt *types.Receipt, err error) {
 	if err != nil {
 		return
 	}
+	if receipt != nil {
+		t.callstack[0].GasUsed = receipt.GasUsed
+	}
 
 	if len(t.callstack) == 0 {
 		if receipt.Status == types.ReceiptStatusFailed {
@@ -241,7 +244,6 @@ func (t *callTracer) OnTxEnd(receipt *types.Receipt, err error) {
 		panic(fmt.Sprintf("callstack empty %p, %d", t, receipt.GasUsed))
 	}
 
-	t.callstack[0].GasUsed = receipt.GasUsed
 	if t.config.WithLog {
 		// Logs are not emitted when the call fails
 		clearFailedLogs(&t.callstack[0], false)

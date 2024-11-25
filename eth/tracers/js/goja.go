@@ -238,7 +238,6 @@ func newJsTracer(code string, ctx *tracers.Context, cfg json.RawMessage) (*trace
 
 // OnTxStart implements the Tracer interface and is invoked at the beginning of
 // transaction processing.
-
 func (t *jsTracer) OnTxStart(env *tracing.VMContext, tx *types.Transaction, from common.Address) {
 	t.env = env
 	// Need statedb access for db object
@@ -255,6 +254,12 @@ func (t *jsTracer) OnTxStart(env *tracing.VMContext, tx *types.Transaction, from
 		return
 	}
 	t.ctx["gasPrice"] = gasPriceBig
+	coinbase, err := t.toBuf(t.vm, env.Coinbase.Bytes())
+	if err != nil {
+		t.err = err
+		return
+	}
+	t.ctx["coinbase"] = t.vm.ToValue(coinbase)
 }
 
 // OnTxEnd implements the Tracer interface and is invoked at the end of
@@ -270,7 +275,9 @@ func (t *jsTracer) OnTxEnd(receipt *types.Receipt, err error) {
 		}
 		return
 	}
-	t.ctx["gasUsed"] = t.vm.ToValue(receipt.GasUsed)
+	if receipt != nil {
+		t.ctx["gasUsed"] = t.vm.ToValue(receipt.GasUsed)
+	}
 }
 
 // onStart implements the Tracer interface to initialize the tracing operation.
@@ -364,13 +371,6 @@ func (t *jsTracer) onEnd(output []byte, gasUsed uint64, err error, reverted bool
 
 // OnEnter is called when EVM enters a new scope (via call, create or selfdestruct).
 func (t *jsTracer) OnEnter(depth int, typ byte, from common.Address, to common.Address, input []byte, gas uint64, value *big.Int) {
-	if t.err != nil {
-		return
-	}
-	if depth == 0 {
-		t.onStart(from, to, vm.OpCode(typ) == vm.CREATE, input, gas, value)
-		return
-	}
 	if t.err != nil {
 		return
 	}
