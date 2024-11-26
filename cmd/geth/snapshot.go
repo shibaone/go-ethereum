@@ -174,9 +174,21 @@ func pruneState(ctx *cli.Context) error {
 	chaindb := utils.MakeChainDatabase(ctx, stack, false)
 	defer chaindb.Close()
 
-	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+	scheme := rawdb.ReadStateScheme(chaindb)
+
+	flags := ctx.App.Flags
+	firehoseTracerEnabled := false
+	for _, flag := range flags {
+		if flag == utils.VMTraceFlag && flag.String() == "firehose" {
+			firehoseTracerEnabled = true
+			break
+		}
+	}
+
+	if scheme != rawdb.HashScheme && !firehoseTracerEnabled {
 		log.Crit("Offline pruning is not required for path scheme")
 	}
+
 	prunerconfig := pruner.Config{
 		Datadir:   stack.ResolvePath(""),
 		BloomSize: ctx.Uint64(utils.BloomFilterSizeFlag.Name),
