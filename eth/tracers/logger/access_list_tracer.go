@@ -17,10 +17,12 @@
 package logger
 
 import (
+	"maps"
+
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/directory"
 )
 
 // accessList is an accumulator for the set of accounts and storage slots an EVM
@@ -71,22 +73,14 @@ func (al accessList) equal(other accessList) bool {
 	// Accounts match, cross reference the storage slots too
 	for addr, slots := range al {
 		otherslots := other[addr]
-
-		if len(slots) != len(otherslots) {
+		if !maps.Equal(slots, otherslots) {
 			return false
-		}
-		// Given that len(slots) == len(otherslots), we only need to check that
-		// all the items from slots are in otherslots.
-		for hash := range slots {
-			if _, ok := otherslots[hash]; !ok {
-				return false
-			}
 		}
 	}
 	return true
 }
 
-// accesslist converts the accesslist to a types.AccessList.
+// accessList converts the accesslist to a types.AccessList.
 func (al accessList) accessList() types.AccessList {
 	acl := make(types.AccessList, 0, len(al))
 	for addr, slots := range al {
@@ -102,7 +96,6 @@ func (al accessList) accessList() types.AccessList {
 // AccessListTracer is a tracer that accumulates touched accounts and storage
 // slots into an internal set.
 type AccessListTracer struct {
-	directory.NoopTracer
 	excl map[common.Address]struct{} // Set of account to exclude from the list
 	list accessList                  // Set of accounts and storage slots touched
 }
@@ -132,14 +125,20 @@ func NewAccessListTracer(acl types.AccessList, from, to common.Address, precompi
 	}
 }
 
-// CaptureState captures all opcodes that touch storage or addresses and adds them to the accesslist.
-func (a *AccessListTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
-	stack := scope.Stack
-	stackData := stack.Data()
+func (a *AccessListTracer) Hooks() *tracing.Hooks {
+	return &tracing.Hooks{
+		OnOpcode: a.OnOpcode,
+	}
+}
+
+// OnOpcode captures all opcodes that touch storage or addresses and adds them to the accesslist.
+func (a *AccessListTracer) OnOpcode(pc uint64, opcode byte, gas, cost uint64, scope tracing.OpContext, rData []byte, depth int, err error) {
+	stackData := scope.StackData()
 	stackLen := len(stackData)
+	op := vm.OpCode(opcode)
 	if (op == vm.SLOAD || op == vm.SSTORE) && stackLen >= 1 {
 		slot := common.Hash(stackData[stackLen-1].Bytes32())
-		a.list.addSlot(scope.Contract.Address(), slot)
+		a.list.addSlot(scope.Address(), slot)
 	}
 	if (op == vm.EXTCODECOPY || op == vm.EXTCODEHASH || op == vm.EXTCODESIZE || op == vm.BALANCE || op == vm.SELFDESTRUCT) && stackLen >= 1 {
 		addr := common.Address(stackData[stackLen-1].Bytes20())
