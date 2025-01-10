@@ -210,6 +210,9 @@ type Hooks struct {
 	// Stylus: capture hostio invocation
 	CaptureStylusHostio CaptureStylusHostioHook
 
+	// Arbitrum Firehose
+	OnBlockUpdate func(b *types.Block, td *big.Int)
+
 	// Firehose backward compatibility
 	// This hook exist because some current Firehose supported chains requires it
 	// but this field is going to be deprecated and newer chains will not produced

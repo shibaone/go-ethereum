@@ -98,6 +98,7 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		OnNewAccount: tracer.OnNewAccount,
 
 		// Arbitrum specific hooks
+		OnBlockUpdate: tracer.OnBlockUpdate,
 
 		// Transfers for this are caught through OnBalanceChange, etc.
 		CaptureArbitrumTransfer: nil,
