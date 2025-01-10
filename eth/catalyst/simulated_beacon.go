@@ -156,6 +156,11 @@ func (c *SimulatedBeacon) sealBlock(withdrawals []*types.Withdrawal, timestamp u
 		c.setCurrentState(header.Hash(), *finalizedHash)
 	}
 
+	payloadVersion := engine.PayloadV3
+	if header := c.eth.BlockChain().CurrentBlock(); !c.eth.BlockChain().Config().IsCancun(header.Number, timestamp, 0) {
+		payloadVersion = engine.PayloadV2
+	}
+
 	var random [32]byte
 	rand.Read(random[:])
 	fcResponse, err := c.engineAPI.forkchoiceUpdated(c.curForkchoiceState, &engine.PayloadAttributes{
@@ -164,7 +169,7 @@ func (c *SimulatedBeacon) sealBlock(withdrawals []*types.Withdrawal, timestamp u
 		Withdrawals:           withdrawals,
 		Random:                random,
 		BeaconRoot:            &common.Hash{},
-	}, engine.PayloadV3, true)
+	}, payloadVersion, false)
 	if err != nil {
 		return err
 	}
@@ -202,15 +207,17 @@ func (c *SimulatedBeacon) sealBlock(withdrawals []*types.Withdrawal, timestamp u
 		}
 	}
 
-	if c.eth.BlockChain().Config().IsCancun(new(big.Int).SetUint64(envelope.ExecutionPayload.Number), envelope.ExecutionPayload.Timestamp, 0) {
-		// Mark the payload as canon
-		if _, err = c.engineAPI.NewPayloadV3(*payload, blobHashes, &common.Hash{}); err != nil {
-			return err
-		}
-	} else {
-		if _, err = c.engineAPI.NewPayloadV2(*payload); err != nil {
-			return err
-		}
+	beaconRoot := &common.Hash{}
+
+	if payloadVersion == engine.PayloadV2 {
+		blobHashes = nil
+		beaconRoot = nil
+	}
+
+	// Mark the payload as canon
+	_, err = c.engineAPI.newPayload(*payload, blobHashes, beaconRoot)
+	if err != nil {
+		return err
 	}
 
 	c.setCurrentState(payload.BlockHash, finalizedHash)
