@@ -201,10 +201,18 @@ func (c *SimulatedBeacon) sealBlock(withdrawals []*types.Withdrawal, timestamp u
 			blobHashes = append(blobHashes, kzg4844.CalcBlobHashV1(hasher, &c))
 		}
 	}
-	// Mark the payload as canon
-	if _, err = c.engineAPI.NewPayloadV3(*payload, blobHashes, &common.Hash{}); err != nil {
-		return err
+
+	if c.eth.BlockChain().Config().IsCancun(new(big.Int).SetUint64(envelope.ExecutionPayload.Number), envelope.ExecutionPayload.Timestamp, 0) {
+		// Mark the payload as canon
+		if _, err = c.engineAPI.NewPayloadV3(*payload, blobHashes, &common.Hash{}); err != nil {
+			return err
+		}
+	} else {
+		if _, err = c.engineAPI.NewPayloadV2(*payload); err != nil {
+			return err
+		}
 	}
+
 	c.setCurrentState(payload.BlockHash, finalizedHash)
 
 	// Mark the block containing the payload as canonical
