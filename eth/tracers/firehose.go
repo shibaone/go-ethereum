@@ -618,6 +618,14 @@ func (f *Firehose) OnCallEnter(depth int, typ byte, from common.Address, to comm
 			f.ensureInCall()
 			f.callStack.Peek().Suicide = true
 
+			// Arbitrum Bogus Behavior
+			//
+			// This must be kept but it generates an extra duplicated BalanceChange within Block model
+			// output by Arbitrum.
+			if value.Sign() != 0 {
+				f.OnBalanceChange(from, value, common.Big0, tracing.BalanceDecreaseSelfdestruct)
+			}
+
 			// The next OnCallExit must be ignored, this variable will make the next OnCallExit to be ignored
 			firehoseDebug("ignoring OnCallEnter for SELFDESTRUCT opcode, not recorded as a call")
 			f.latestCallEnterSuicided = true
