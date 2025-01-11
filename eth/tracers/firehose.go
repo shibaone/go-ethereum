@@ -29,7 +29,6 @@ import (
 	pbeth "github.com/ethereum/go-ethereum/pb/sf/ethereum/type/v2"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
-	"github.com/streamingfast/eth-go"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
@@ -1955,31 +1954,6 @@ func (d *DeferredCallState) Reset() {
 	d.logs = nil
 	d.accountCreations = nil
 	d.nonceChanges = nil
-}
-
-func ctxView(f *Firehose) _ctxView {
-	return _ctxView{f}
-}
-
-type _ctxView struct {
-	f *Firehose
-}
-
-func (v _ctxView) String() string {
-	if v.f == nil {
-		return "no firehose"
-	}
-	blk := "<no block>"
-	if v.f.block != nil {
-		blk = fmt.Sprintf("#%d (%s)", v.f.block.Number, hex.EncodeToString(v.f.block.Hash))
-	}
-
-	trx := "<no trx>"
-	if v.f.transaction != nil {
-		trx = eth.Hash(v.f.transaction.Hash).Pretty()
-	}
-
-	return fmt.Sprintf("ctx=[%s, %s]", blk, trx)
 }
 
 func errorView(err error) _errorView {
