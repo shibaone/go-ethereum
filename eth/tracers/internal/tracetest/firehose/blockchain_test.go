@@ -48,7 +48,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 		GasLimit:         context.GasLimit,
 		BaseFee:          context.BaseFee,
 		ParentBeaconRoot: ptr(common.Hash{}),
-	}, &types.Body{Transactions: []*types.Transaction{tx}}, nil, trie.NewStackTrie(nil))
+	}, &types.Body{Transactions: []*types.Transaction{tx}}, nil, trie.NewStackTrie(nil), types.DefaultBlockConfig)
 
 	hooks.OnBlockchainInit(prestate.Genesis.Config)
 	hooks.OnBlockStart(tracing.BlockEvent{

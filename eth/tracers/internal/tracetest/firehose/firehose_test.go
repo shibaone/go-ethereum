@@ -48,7 +48,7 @@ func TestFirehoseChain(t *testing.T) {
 		Time:       context.Time,
 		GasLimit:   context.GasLimit,
 		BaseFee:    context.BaseFee,
-	}, nil, nil, nil)
+	}, nil, nil, nil, types.DefaultBlockConfig)
 
 	blockchain.SetBlockValidatorAndProcessorForTesting(
 		ignoreValidateStateValidator{core.NewBlockValidator(genesis.Config, blockchain)},
