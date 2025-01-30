@@ -48,49 +48,49 @@ jobs:
       #     make geth-linux-arm
 
       - name: Upload Linux Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: matrix.os == 'ubuntu-20.04'
         with:
           name: linux
           path: ./build/bin/geth
 
       - name: Upload MacOS Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: matrix.os == 'macos-latest'
         with:
           name: macos
           path: ./build/bin/geth
 
       # - name: Upload Windows Build
-      #   uses: actions/upload-artifact@v3
+      #   uses: actions/upload-artifact@v4
       #   if: matrix.os == 'windows-latest'
       #   with:
       #     name: windows
       #     path: ./build/bin/geth.exe
 
       # - name: Upload ARM-5 Build
-      #   uses: actions/upload-artifact@v3
+      #   uses: actions/upload-artifact@v4
       #   if: matrix.os == 'ubuntu-20.04'
       #   with:
       #     name: arm5
       #     path: ./build/bin/geth-linux-arm-5
 
       # - name: Upload ARM-6 Build
-      #   uses: actions/upload-artifact@v3
+      #   uses: actions/upload-artifact@v4
       #   if: matrix.os == 'ubuntu-20.04'
       #   with:
       #     name: arm6
       #     path: ./build/bin/geth-linux-arm-6
 
       # - name: Upload ARM-7 Build
-      #   uses: actions/upload-artifact@v3
+      #   uses: actions/upload-artifact@v4
       #   if: matrix.os == 'ubuntu-20.04'
       #   with:
       #     name: arm7
       #     path: ./build/bin/geth-linux-arm-7
 
       # - name: Upload ARM-64 Build
-      #   uses: actions/upload-artifact@v3
+      #   uses: actions/upload-artifact@v4
       #   if: matrix.os == 'ubuntu-20.04'
       #   with:
       #     name: arm64
