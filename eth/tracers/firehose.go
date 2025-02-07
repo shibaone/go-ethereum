@@ -545,7 +545,6 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 
 	callLogs := []*pbeth.Log{}
 	for _, call := range trx.Calls {
-		firehoseTrace("checking call (reverted=%t logs=%d)", call.StateReverted, len(call.Logs))
 		if call.StateReverted {
 			continue
 		}
@@ -1055,6 +1054,15 @@ func (f *Firehose) OnBalanceChange(a common.Address, prev, new *big.Int, reason 
 		// We ignore those, if they are mislabelled, too bad so particular attention needs to be ported to this
 		return
 	}
+
+	// Known Firehose issue: It's possible to burn Ether by sending some ether to a suicided account. In those case,
+	// at the end of block producing, StateDB finalize the block by burning ether from the account. This is something
+	// we were not tracking in the old Firehose instrumentation.
+	//
+	// Arbitrum: It was actually tracked since it was there from the beginning. Need to be commented out for now.
+	// if reason == tracing.BalanceDecreaseSelfdestructBurn {
+	// 	return
+	// }
 
 	f.ensureInBlockOrTrx()
 
