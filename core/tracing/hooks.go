@@ -219,6 +219,10 @@ type Hooks struct {
 	// those events anymore. The hook is registered conditionally based on the
 	// tracer configuration.
 	OnNewAccount func(address common.Address, previousExisted bool)
+
+	// Temporary fix to try to align with older Arbitrum Firehose instrumentation until we understand why it creates
+	// differences in Arbitrum.
+	OnKeccakPreimage func(hash common.Hash, preimage []byte)
 }
 
 // BalanceChangeReason is used to indicate the reason for a balance change, useful

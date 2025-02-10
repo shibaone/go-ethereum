@@ -107,6 +107,10 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		CaptureArbitrumStorageSet: nil,
 		// Nothing interesting for firehose here
 		CaptureStylusHostio: nil,
+
+		// Temporary to try to overcome the diff around keccak preimages
+		// diff with older Firehose tracer.
+		OnKeccakPreimage: tracer.OnKeccakPreimage,
 	}
 }
 
@@ -745,8 +749,10 @@ func (f *Firehose) OnOpcode(pc uint64, op byte, gas, cost uint64, scope tracing.
 		}
 
 		switch opCode {
-		case vm.KECCAK256:
-			f.onOpcodeKeccak256(activeCall, scope.StackData(), Memory(scope.MemoryData()))
+		// Firehose KeccakPreimage Issue: Temporary fix, called via OnKeccakPreimage directly instead until
+		// we understand why we have extra keccak preimages in new version
+		// case vm.KECCAK256:
+		// 	f.onOpcodeKeccak256(activeCall, scope.StackData(), Memory(scope.MemoryData()))
 
 		case vm.SELFDESTRUCT:
 			f.ensureInCall()
@@ -940,9 +946,26 @@ func computeCallSource(depth int) string {
 	return "child"
 }
 
+func (f *Firehose) OnKeccakPreimage(hash common.Hash, data []byte) {
+	f.ensureInBlockAndInTrxAndInCall()
+
+	activeCall := f.callStack.Peek()
+	if activeCall.KeccakPreimages == nil {
+		activeCall.KeccakPreimages = make(map[string]string)
+	}
+
+	activeCall.KeccakPreimages[hex.EncodeToString(hash.Bytes())] = hex.EncodeToString(data)
+}
+
+// Ignores the unused warning
+var _ = (&Firehose{}).onOpcodeKeccak256
+
 // onOpcodeKeccak256 is called during the SHA3 (a.k.a KECCAK256) opcode it's known
 // in Firehose tracer as Keccak preimages. The preimage is the input data that
 // was used to produce the given keccak hash.
+//
+// Firehose KeccakPreimage Issue: Temporary fix, called via OnKeccakPreimage directly instead until
+// we understand why we have extra keccak preimages in new version
 func (f *Firehose) onOpcodeKeccak256(call *pbeth.Call, stack []uint256.Int, memory Memory) {
 	if call.KeccakPreimages == nil {
 		call.KeccakPreimages = make(map[string]string)
