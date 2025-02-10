@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/urfave/cli/v2"
 )
@@ -56,7 +57,7 @@ The output of this command is supposed to be machine-readable.
 		Usage:     "Checks (online) for known Geth security vulnerabilities",
 		ArgsUsage: "<versionstring (optional)>",
 		Description: `
-The version-check command fetches vulnerability-information from https://geth.ethereum.org/docs/vulnerabilities/vulnerabilities.json, 
+The version-check command fetches vulnerability-information from https://geth.ethereum.org/docs/vulnerabilities/vulnerabilities.json,
 and displays information about any security vulnerabilities that affect the currently executing version.
 `,
 	}
@@ -73,6 +74,7 @@ func printVersion(ctx *cli.Context) error {
 
 	fmt.Println(strings.Title(clientIdentifier))
 	fmt.Println("Version:", version.WithMeta)
+	fmt.Println("Firehose Tracer Protocol Version: fh", tracers.FirehoseProtocolVersion)
 	if git.Commit != "" {
 		fmt.Println("Git Commit:", git.Commit)
 	}
