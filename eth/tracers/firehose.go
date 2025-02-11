@@ -1867,6 +1867,8 @@ var balanceChangeReasonToPb = map[tracing.BalanceChangeReason]pbeth.BalanceChang
 	tracing.BalanceDecreaseSelfdestruct:         pbeth.BalanceChange_REASON_SUICIDE_WITHDRAW,
 	tracing.BalanceDecreaseSelfdestructBurn:     pbeth.BalanceChange_REASON_BURN,
 	tracing.BalanceIncreaseWithdrawal:           pbeth.BalanceChange_REASON_WITHDRAWAL,
+	tracing.BalanceDecreaseBSCDistributeReward:  pbeth.BalanceChange_REASON_REWARD_TRANSACTION_FEE,
+	tracing.BalanceIncreaseBSCDistributeReward:  pbeth.BalanceChange_REASON_REWARD_TRANSACTION_FEE,
 
 	tracing.BalanceChangeUnspecified: pbeth.BalanceChange_REASON_UNKNOWN,
 }
