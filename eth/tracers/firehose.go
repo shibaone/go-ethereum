@@ -1246,16 +1246,9 @@ func (f *Firehose) OnNewAccount(address common.Address) {
 	// while here we check only if the call is a precompiled address.
 	//
 	// Too late anyway, leaving this comment if we ever decide to merge Firehose tracers implementation.
-	//
-	// Second problem, while Arbitrum seemed to actually check precompiles address within the StateDB when
-	// dealing with account creations, it's actually not the case at all as the PrepareBlock method
-	// that was supposed to populate precompiles per block was not called at all.
-	//
-	// This means an address was never considered a precompile address and as such, we must not do anything
-	// special neither here, hence why the code below is now commented out.
-	// if f.blockIsPrecompiledAddr(address) {
-	// 	return
-	// }
+	if f.blockIsPrecompiledAddr(address) {
+		return
+	}
 
 	accountCreation := &pbeth.AccountCreation{
 		Account: address.Bytes(),
