@@ -106,8 +106,15 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	posa, isPoSA := p.chain.engine.(consensus.PoSA)
 	commonTxs := make([]*types.Transaction, 0, txNum)
 
-	// initialise bloom processors
-	bloomProcessors := NewAsyncReceiptBloomGenerator(txNum)
+	var bloomProcessors ReceiptProcessor
+	if cfg.Tracer != nil && cfg.Tracer.OnTxEnd != nil {
+		// We cannot use the async receipt bloom generator if we have a tracing hook on tx end,
+		// since the receipt will be sent to the hook without the bloom filter (it gets generated afterwards)
+		bloomProcessors = NewReceiptBloomGenerator()
+	} else {
+		bloomProcessors = NewAsyncReceiptBloomGenerator(txNum)
+	}
+
 	statedb.MarkFullProcessed()
 
 	// usually do have two tx, one for validator set contract, another for system reward contract.
@@ -116,7 +123,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		if isPoSA {
 			if isSystemTx, err := posa.IsSystemTransaction(tx, block.Header()); err != nil {
-				bloomProcessors.Close()
+				if asyncBloomProcessor, ok := bloomProcessors.(*AsyncReceiptBloomGenerator); ok {
+					asyncBloomProcessor.Close()
+				}
 				return nil, err
 			} else if isSystemTx {
 				systemTxs = append(systemTxs, tx)
@@ -125,7 +134,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		if p.config.IsCancun(block.Number(), block.Time()) {
 			if len(systemTxs) > 0 {
-				bloomProcessors.Close()
+				if asyncBloomProcessor, ok := bloomProcessors.(*AsyncReceiptBloomGenerator); ok {
+					asyncBloomProcessor.Close()
+				}
 				// systemTxs should be always at the end of block.
 				return nil, fmt.Errorf("normal tx %d [%v] after systemTx", i, tx.Hash().Hex())
 			}
@@ -133,20 +144,26 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
-			bloomProcessors.Close()
+			if asyncBloomProcessor, ok := bloomProcessors.(*AsyncReceiptBloomGenerator); ok {
+				asyncBloomProcessor.Close()
+			}
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		statedb.SetTxContext(tx.Hash(), i)
 
 		receipt, err := ApplyTransactionWithEVM(msg, gp, statedb, blockNumber, blockHash, tx, usedGas, evm, bloomProcessors)
 		if err != nil {
-			bloomProcessors.Close()
+			if asyncBloomProcessor, ok := bloomProcessors.(*AsyncReceiptBloomGenerator); ok {
+				asyncBloomProcessor.Close()
+			}
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		commonTxs = append(commonTxs, tx)
 		receipts = append(receipts, receipt)
 	}
-	bloomProcessors.Close()
+	if asyncBloomProcessor, ok := bloomProcessors.(*AsyncReceiptBloomGenerator); ok {
+		asyncBloomProcessor.Close()
+	}
 
 	// Read requests if Prague is enabled.
 	var requests [][]byte

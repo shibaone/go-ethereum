@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,25 +38,20 @@ func TestFirehoseChain(t *testing.T) {
 
 	hooks := tracers.NewTracingHooksFromFirehose(tracer)
 
-	genesis, blockchain := newBlockchain(t, types.GenesisAlloc{}, context, hooks)
+	genesis, blockchain, engine := newBlockchain(t, types.GenesisAlloc{}, context, hooks)
 
-	block := types.NewBlock(&types.Header{
-		ParentHash:       genesis.ToBlock().Hash(),
-		Number:           context.BlockNumber,
-		Difficulty:       context.Difficulty,
-		Coinbase:         context.Coinbase,
-		Time:             context.Time,
-		GasLimit:         context.GasLimit,
-		BaseFee:          context.BaseFee,
-		ParentBeaconRoot: ptr(common.Hash{}),
-	}, nil, nil, trie.NewStackTrie(nil))
+	_, blocks, _ := core.GenerateChainWithGenesis(genesis, engine, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(context.Coinbase)
+		b.SetDifficulty(context.Difficulty)
+		b.SetParentBeaconRoot(common.Hash{})
+	})
 
 	blockchain.SetBlockValidatorAndProcessorForTesting(
 		ignoreValidateStateValidator{core.NewBlockValidator(genesis.Config, blockchain)},
 		core.NewStateProcessor(genesis.Config, blockchain.HeaderChain()),
 	)
 
-	n, err := blockchain.InsertChain(types.Blocks{block})
+	n, err := blockchain.InsertChain(blocks)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 
@@ -65,7 +59,7 @@ func TestFirehoseChain(t *testing.T) {
 	require.Len(t, unknownLines, 0, "Lines:\n%s", strings.Join(slicesMap(unknownLines, func(l unknownLine) string { return "- '" + string(l) + "'" }), "\n"))
 	require.NotNil(t, genesisLine)
 	blockLines.assertEquals(t, filepath.Join("testdata", t.Name()),
-		firehoseBlockLineParams{"1", "8e6ee4b1054d94df1d8a51fb983447dc2e27a854590c3ac0061f994284be8150", "0", "845bad515694a416bab4b8d44e22cf97a8c894a8502110ab807883940e185ce0", "0", "1000000000"},
+		firehoseBlockLineParams{"1", "cf7d0082c6616f6079dd9ed467fbc925a9032978f65caadc250d9a443436530b", "0", "845bad515694a416bab4b8d44e22cf97a8c894a8502110ab807883940e185ce0", "0", "10000000000"},
 	)
 }
 

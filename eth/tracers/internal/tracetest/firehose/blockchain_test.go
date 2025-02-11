@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -81,13 +82,14 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 		tx,
 		&usedGas,
 		vmenv,
+		core.NewReceiptBloomGenerator(),
 	)
 	require.NoError(t, err)
 
 	hooks.OnBlockEnd(nil)
 }
 
-func newBlockchain(t *testing.T, alloc types.GenesisAlloc, context vm.BlockContext, tracer *tracing.Hooks) (*core.Genesis, *core.BlockChain) {
+func newBlockchain(t *testing.T, alloc types.GenesisAlloc, context vm.BlockContext, tracer *tracing.Hooks) (*core.Genesis, *core.BlockChain, consensus.Engine) {
 	t.Helper()
 
 	genesis := &core.Genesis{
@@ -103,13 +105,14 @@ func newBlockchain(t *testing.T, alloc types.GenesisAlloc, context vm.BlockConte
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, false)))
 	defer log.SetDefault(log.NewLogger(log.DiscardHandler()))
 
+	engine := ethash.NewFullFaker()
 	var usedGas uint64
-	blockchain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), core.DefaultCacheConfigWithScheme(rawdb.HashScheme), genesis, nil, ethash.NewFullFaker(), vm.Config{
+	blockchain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), core.DefaultCacheConfigWithScheme(rawdb.HashScheme), genesis, nil, engine, vm.Config{
 		Tracer: tracer,
 	}, nil, &usedGas)
 	require.NoError(t, err)
 
-	return genesis, blockchain
+	return genesis, blockchain, engine
 }
 
 // testHasher is the helper tool for transaction/receipt list hashing.
