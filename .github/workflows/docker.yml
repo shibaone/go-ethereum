@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
 
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - uses: actions/checkout@v3
 
@@ -48,4 +52,3 @@ jobs:
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker tag $IMAGE_NAME $IMAGE_ID:latest
           docker push $IMAGE_ID:$VERSION
-          
