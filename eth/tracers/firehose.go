@@ -1008,7 +1008,7 @@ func (f *Firehose) OnGenesisBlock(b *types.Block, alloc types.GenesisAlloc) {
 	for _, addr := range sortedKeys(alloc) {
 		account := alloc[addr]
 
-		f.OnNewAccount(addr, false)
+		f.OnNewAccount(addr)
 
 		if account.Balance != nil && account.Balance.Sign() != 0 {
 			activeCall := f.callStack.Peek()
