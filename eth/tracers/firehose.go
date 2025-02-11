@@ -2265,7 +2265,11 @@ func (s *FinalityStatus) Reset() {
 }
 
 func (s *FinalityStatus) IsEmpty() bool {
-	return s.LastIrreversibleBlockNumber == 0 && len(s.LastIrreversibleBlockHash) == 0
+	return s.LastIrreversibleBlockNumber == 0
+	// it seems, at the beginning of BNB chains, the finality status is set with the genesis block
+	// this is different than on mainnet, where it gets set with an empty hash
+	//
+	//&& len(s.LastIrreversibleBlockHash) == 0
 }
 
 var errFirehoseUnknownType = errors.New("firehose unknown tx type")
