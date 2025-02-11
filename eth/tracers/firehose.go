@@ -1968,6 +1968,10 @@ func (d *DeferredCallState) MaybePopulateCallAndReset(source string, call *pbeth
 	call.GasChanges = append(call.GasChanges, d.gasChanges...)
 	call.StorageChanges = append(call.StorageChanges, d.storageChanges...)
 	call.Logs = append(call.Logs, d.logs...)
+	// Sic: This is a mistake but has been there since the beginning, since it's there in production,
+	// we need to keep it that way until we decide to fix the bug. In the Arbitrum case, we could however
+	// fix it as part of the backward compatibility flag. Indeed, right now we produces 2.3 model with
+	// some extra bugs. So we could fix it as part of 3.0 version.
 	call.AccountCreations = append(call.AccountCreations, d.accountCreations...)
 	call.NonceChanges = append(call.NonceChanges, d.nonceChanges...)
 
