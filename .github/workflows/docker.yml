@@ -7,6 +7,7 @@ on:
 
 env:
   IMAGE_NAME: streamingfast/go-ethereum
+  REGISTRY: ghcr.io
 
 jobs:
   # Push image to GitHub Packages.
