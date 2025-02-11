@@ -535,11 +535,13 @@ func (s *StateDB) SubBalance(addr common.Address, amount *uint256.Int, reason tr
 	return stateObject.SetBalance(new(uint256.Int).Sub(stateObject.Balance(), amount))
 }
 
-func (s *StateDB) SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason) {
+func (s *StateDB) SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason) (changed bool) {
 	stateObject := s.getOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.SetBalance(amount)
+		return true
 	}
+	return false
 }
 
 func (s *StateDB) SetNonce(addr common.Address, nonce uint64, reason tracing.NonceChangeReason) {

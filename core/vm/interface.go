@@ -37,7 +37,7 @@ type StateDB interface {
 	SubBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
 	AddBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
 	GetBalance(common.Address) *uint256.Int
-	SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason)
+	SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason) bool
 
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64, tracing.NonceChangeReason)

@@ -164,6 +164,7 @@ type Firehose struct {
 	transaction          *pbeth.TransactionTrace
 	transactionLogIndex  uint32
 	inSystemCall         bool
+	inSystemTx           bool
 	transactionIsolated  bool
 	transactionTransient *pbeth.TransactionTrace
 
@@ -516,6 +517,20 @@ func (f *Firehose) reorderCallOrdinals(call *pbeth.Call, ordinalBase uint64) (or
 	call.EndOrdinal += ordinalBase
 
 	return call.EndOrdinal
+}
+
+func (f *Firehose) OnSystemTxStart() {
+	firehoseInfo("system tx start")
+	f.ensureInBlockAndNotInTrx()
+
+	f.inSystemTx = true
+}
+
+func (f *Firehose) OnSystemTxEnd() {
+	firehoseInfo("system tx end")
+	f.ensureInSystemTx()
+
+	f.inSystemTx = false
 }
 
 func (f *Firehose) OnSystemCallStart() {
@@ -1278,6 +1293,11 @@ func (f *Firehose) newBalanceChange(tag string, address common.Address, oldValue
 func (f *Firehose) OnNonceChange(a common.Address, prev, new uint64) {
 	f.ensureInBlockAndInTrx()
 
+	if *f.applyBackwardCompatibility && f.inSystemTx {
+		// Known Firehose issue: The nonce changes for system transactions are not recorded in the old Firehose instrumentation
+		return
+	}
+
 	activeCall := f.callStack.Peek()
 	change := &pbeth.NonceChange{
 		Address:  a.Bytes(),
@@ -1556,6 +1576,12 @@ func (f *Firehose) ensureInCall() {
 func (f *Firehose) ensureInSystemCall() {
 	if !f.inSystemCall {
 		f.panicInvalidState("call expected to be in system call state but we were not, this is a bug", 2)
+	}
+}
+
+func (f *Firehose) ensureInSystemTx() {
+	if !f.inSystemTx {
+		f.panicInvalidState("caller expected to be in system transaction state but we were not, this is a bug", 2)
 	}
 }
 
