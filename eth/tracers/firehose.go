@@ -1223,7 +1223,7 @@ func (f *Firehose) OnLog(l *types.Log) {
 	activeCall.Logs = append(activeCall.Logs, log)
 }
 
-func (f *Firehose) OnNewAccount(address common.Address, previousExisted bool) {
+func (f *Firehose) OnNewAccount(address common.Address) {
 	f.ensureInBlockOrTrx()
 	if f.transaction == nil {
 		// We receive OnNewAccount on finalization of the block which means there is no
@@ -1239,7 +1239,7 @@ func (f *Firehose) OnNewAccount(address common.Address, previousExisted bool) {
 	}
 
 	// There is a disparity between Ethereum Mainnet Firehose 3.0 (in backward compatibility mode)
-	// and this Arbitrum tracer implementation. The new Fireheose 3.0 (in backward compatibility mode)
+	// and this Arbitrum tracer implementation. The new Firehose 3.0 (in backward compatibility mode)
 	// has `call := f.callStack.Peek(); call != nil && call.CallType == pbeth.CallType_STATIC && f.blockIsPrecompiledAddr(common.Address(call.Address))`
 	// while here we check only if the call is a precompiled address.
 	//

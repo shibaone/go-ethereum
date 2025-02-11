@@ -711,13 +711,19 @@ func (s *StateDB) getOrNewStateObject(addr common.Address) *stateObject {
 // createObject creates a new state object. The assumption is held there is no
 // existing account with the given address, otherwise it will be silently overwritten.
 func (s *StateDB) createObject(addr common.Address) *stateObject {
-	var prev *stateObject
+	var prevExistOrDestructed bool
 	if s.logger != nil && s.logger.OnNewAccount != nil {
-		prev = s.getStateObject(addr)
+		prevExistOrDestructed = s.getStateObject(addr) != nil
+		if !prevExistOrDestructed {
+			prevExistOrDestructed = s.stateObjectsDestruct[addr] != nil
+		}
 	}
 	obj := newObject(s, addr, nil)
-	if s.logger != nil && s.logger.OnNewAccount != nil {
-		s.logger.OnNewAccount(addr, prev != nil)
+	if s.logger != nil && s.logger.OnNewAccount != nil && !prevExistOrDestructed {
+		// Firehose: Arbitrum Firehose tracer is created from a development version of Firehose 3.0
+		// and add the OnNewAccount implemented only on new account only while "stock" Firehose 2.3
+		// model actually has OnNewAccount implemented on every account even if a previous account existed.
+		s.logger.OnNewAccount(addr)
 	}
 
 	s.journal.append(createObjectChange{account: &addr})
