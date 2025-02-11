@@ -262,7 +262,7 @@ func (f *Firehose) OnBlockchainInit(chainConfig *params.ChainConfig) {
 		// Quite unsure what we could do, might not be of importance actually (but would
 		// indeed be nice to have the version in the firehose logs, but it's not a blocker)
 		// arbitrumVcsVersion, _, _ := confighelpers.GetVersion()
-		printToFirehose("INIT", FirehoseProtocolVersion, "arbitrum", params.VersionWithMeta)
+		f.printToFirehose("INIT", FirehoseProtocolVersion, "arbitrum", params.VersionWithMeta)
 	} else {
 		f.panicInvalidState("The OnBlockchainInit callback was called more than once", 0)
 	}
@@ -1224,6 +1224,8 @@ func (f *Firehose) OnLog(l *types.Log) {
 }
 
 func (f *Firehose) OnNewAccount(address common.Address) {
+	firehoseTrace("new account invoked (address=%s)", address)
+
 	f.ensureInBlockOrTrx()
 	if f.transaction == nil {
 		// We receive OnNewAccount on finalization of the block which means there is no
@@ -1255,10 +1257,12 @@ func (f *Firehose) OnNewAccount(address common.Address) {
 
 	activeCall := f.callStack.Peek()
 	if activeCall == nil {
+		firehoseTrace("new account recorded in deferred (address=%s)", address)
 		f.deferredCallState.accountCreations = append(f.deferredCallState.accountCreations, accountCreation)
 		return
 	}
 
+	firehoseTrace("new account recorded (address=%s)", address)
 	activeCall.AccountCreations = append(activeCall.AccountCreations, accountCreation)
 }
 
@@ -1438,7 +1442,7 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 
 	f.outputBuffer.WriteString("\n")
 
-	flushToFirehose(f.outputBuffer.Bytes(), os.Stdout)
+	f.flushToFirehose(f.outputBuffer.Bytes())
 }
 
 // NormalizeLastIrreversibleBlockNum returns the normalized LIB number for the given head block number.
@@ -1472,8 +1476,8 @@ func (s *FinalityStatus) NormalizeLastIrreversibleBlockNum(headBlockNum uint64) 
 // as adding a newline at the end.
 //
 // It flushes this through [flushToFirehose] to the `os.Stdout` writer.
-func printToFirehose(input ...string) {
-	flushToFirehose([]byte("FIRE "+strings.Join(input, " ")+"\n"), os.Stdout)
+func (f *Firehose) printToFirehose(input ...string) {
+	f.flushToFirehose([]byte("FIRE " + strings.Join(input, " ") + "\n"))
 }
 
 // flushToFirehose sends data to Firehose via `io.Writter` checking for errors
@@ -1482,7 +1486,12 @@ func printToFirehose(input ...string) {
 // If error is still present after 10 retries, prints an error message to `writer`
 // as well as writing file `/tmp/firehose_writer_failed_print.log` with the same
 // error message.
-func flushToFirehose(in []byte, writer io.Writer) {
+func (f *Firehose) flushToFirehose(in []byte) {
+	var writer io.Writer = os.Stdout
+	if f.testingBuffer != nil {
+		writer = f.testingBuffer
+	}
+
 	var written int
 	var err error
 	loops := 10
