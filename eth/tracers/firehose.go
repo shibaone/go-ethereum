@@ -1113,7 +1113,7 @@ func (f *Firehose) getExecutedCode(evm *tracing.VMContext, call *pbeth.Call) boo
 	}
 
 	firehoseTrace("executed code default (callType=%s inputLength=%d)", call.CallType.String(), len(call.Input))
-	return call.CallType != pbeth.CallType_CREATE && len(call.Input) > 0
+	return call.CallType != pbeth.CallType_CREATE && len(call.Input) > 0 && len(evm.StateDB.GetCode(common.Address(call.Address))) > 0
 }
 
 func (f *Firehose) callEnd(source string, output []byte, gasUsed uint64, err error, reverted bool) {

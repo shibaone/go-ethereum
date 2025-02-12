@@ -1825,8 +1825,8 @@ func (p *Parlia) distributeIncoming(val common.Address, state vm.StateDB, header
 		rewards := new(uint256.Int)
 		rewards = rewards.Rsh(balance, systemRewardPercent)
 		if rewards.Cmp(common.U2560) > 0 {
-			state.SetBalance(consensus.SystemAddress, balance.Sub(balance, rewards), tracing.BalanceChangeUnspecified)
-			state.AddBalance(coinbase, rewards, tracing.BalanceChangeUnspecified)
+			state.SetBalance(consensus.SystemAddress, balance.Sub(balance, rewards), tracing.BalanceDecreaseBSCDistributeReward)
+			state.AddBalance(coinbase, rewards, tracing.BalanceIncreaseBSCDistributeReward)
 			err := p.distributeToSystem(rewards.ToBig(), state, header, chain, txs, receipts, receivedTxs, usedGas, mining, tracer)
 			if err != nil {
 				return err
