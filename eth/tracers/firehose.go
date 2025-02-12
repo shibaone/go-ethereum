@@ -97,6 +97,8 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		// but Firehose needs them so we add handling for them in our patch.
 		OnSystemCallStart: tracer.OnSystemCallStart,
 		OnSystemCallEnd:   tracer.OnSystemCallEnd,
+		OnSystemTxStart:   tracer.OnSystemTxStart,
+		OnSystemTxEnd:     tracer.OnSystemTxEnd,
 
 		// This should actually be conditional but it's not possible to do it in the hooks
 		// directly because the chain ID will be known only after the `OnBlockchainInit` call.
