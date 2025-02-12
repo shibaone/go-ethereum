@@ -555,7 +555,7 @@ func (st *stateTransition) execute() (*ExecutionResult, error) {
 			blobFee := new(big.Int).SetUint64(st.blobGasUsed())
 			blobFee.Mul(blobFee, st.evm.Context.BlobBaseFee)
 			blobFeeU256, _ := uint256.FromBig(blobFee)
-			st.state.AddBalance(consensus.SystemAddress, blobFeeU256, tracing.BalanceIncreaseRewardTransactionFee)
+			st.state.AddBalance(consensus.SystemAddress, blobFeeU256, tracing.BalanceIncreaseRewardBlobFee)
 		}
 	} else {
 		st.state.AddBalance(st.evm.Context.Coinbase, fee, tracing.BalanceIncreaseRewardTransactionFee)

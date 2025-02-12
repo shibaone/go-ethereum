@@ -354,7 +354,7 @@ func (f *Firehose) OnBlockStart(event tracing.BlockEvent) {
 		Hash:   hash.Bytes(),
 		Number: block.NumberU64(),
 		// FIXME: Avoid calling 'Header()', it makes a copy while accessing event.Block getters directly avoids it
-		Header: newBlockHeaderFromChainHeader(hash, block.Header(), firehoseBigIntFromNative(new(big.Int).Add(event.TD, block.Difficulty()))),
+		Header: newBlockHeaderFromChainHeader(hash, block.Header(), firehoseBigIntFromNative(new(big.Int).Add(event.TD, block.Difficulty())), *f.applyBackwardCompatibility),
 		Ver:    4,
 
 		// FIXME: 'block.Size()' is a relatively heavy operation, could we do it async?
@@ -366,7 +366,7 @@ func (f *Firehose) OnBlockStart(event tracing.BlockEvent) {
 	}
 
 	for _, uncle := range block.Uncles() {
-		f.block.Uncles = append(f.block.Uncles, newBlockHeaderFromChainHeader(uncle.Hash(), uncle, nil))
+		f.block.Uncles = append(f.block.Uncles, newBlockHeaderFromChainHeader(uncle.Hash(), uncle, nil, *f.applyBackwardCompatibility))
 	}
 
 	if f.block.Header.BaseFeePerGas != nil {
@@ -1698,7 +1698,7 @@ func (f *Firehose) InternalTestingBuffer() *bytes.Buffer {
 }
 
 // FIXME: Create a unit test that is going to fail as soon as any header is added in
-func newBlockHeaderFromChainHeader(hash common.Hash, h *types.Header, td *pbeth.BigInt) *pbeth.BlockHeader {
+func newBlockHeaderFromChainHeader(hash common.Hash, h *types.Header, td *pbeth.BigInt, compatibilityMode bool) *pbeth.BlockHeader {
 	var withdrawalsHashBytes []byte
 	if hash := h.WithdrawalsHash; hash != nil {
 		withdrawalsHashBytes = hash.Bytes()
@@ -1741,6 +1741,10 @@ func newBlockHeaderFromChainHeader(hash common.Hash, h *types.Header, td *pbeth.
 
 		// Only set on Polygon fork(s)
 		TxDependency: nil,
+	}
+
+	if compatibilityMode {
+		pbHead.BaseFeePerGas = firehoseBigIntFromNativeExplicitZero(h.BaseFee)
 	}
 
 	if pbHead.Difficulty == nil {
@@ -1897,6 +1901,7 @@ var balanceChangeReasonToPb = map[tracing.BalanceChangeReason]pbeth.BalanceChang
 	tracing.BalanceIncreaseWithdrawal:           pbeth.BalanceChange_REASON_WITHDRAWAL,
 	tracing.BalanceDecreaseBSCDistributeReward:  pbeth.BalanceChange_REASON_REWARD_TRANSACTION_FEE,
 	tracing.BalanceIncreaseBSCDistributeReward:  pbeth.BalanceChange_REASON_REWARD_TRANSACTION_FEE,
+	tracing.BalanceIncreaseRewardBlobFee:        pbeth.BalanceChange_REASON_REWARD_BLOB_FEE,
 
 	tracing.BalanceChangeUnspecified: pbeth.BalanceChange_REASON_UNKNOWN,
 }
@@ -2262,6 +2267,18 @@ func normalizeSignaturePoint(value []byte) []byte {
 func firehoseBigIntFromNative(in *big.Int) *pbeth.BigInt {
 	if in == nil || in.Sign() == 0 {
 		return nil
+	}
+
+	return &pbeth.BigInt{Bytes: in.Bytes()}
+}
+
+// this version of firehoseBigIntFromNative will return a single byte with value 0 if the input is zero
+func firehoseBigIntFromNativeExplicitZero(in *big.Int) *pbeth.BigInt {
+	if in == nil {
+		return nil
+	}
+	if in.Sign() == 0 {
+		return &pbeth.BigInt{Bytes: []byte{0}}
 	}
 
 	return &pbeth.BigInt{Bytes: in.Bytes()}

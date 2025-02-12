@@ -329,6 +329,8 @@ const (
 	// BalanceIncreaseBSCDistributeReward is a balance change that increases the block validator's balance and
 	// happens when BSC is distributing rewards to validator.
 	BalanceIncreaseBSCDistributeReward BalanceChangeReason = 211
+	// BalanceIncreaseRewardBlobFee  was introduced in Tycho
+	BalanceIncreaseRewardBlobFee BalanceChangeReason = 212
 )
 
 // GasChangeReason is used to indicate the reason for a gas change, useful
