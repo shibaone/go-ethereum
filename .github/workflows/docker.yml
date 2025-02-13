@@ -1,20 +1,21 @@
-name: Docker
+name: Build docker image
 
 on:
   push:
     branches:
-      - release/bnb-1.x-fh3.0
+      # Expected to be <network>/{fix,feature}/<name> where <network> is one of {geth,bsc,polygon,etc.}
+      - "*/fix/*"
+      - "*/feature/*"
+    tags:
+      - "[a-z0-9]+-v*"
 
 env:
-  IMAGE_NAME: streamingfast/go-ethereum
   REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Push image to GitHub Packages.
-  push:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-
+  build-and-push-image:
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -29,27 +30,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image
-        run: |
-            docker build . \
-            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
-            --label "org.opencontainers.image.version=$(git describe --tags --abbrev=0)" \
-            --label "org.opencontainers.image.licenses=LGPL-3.0,GPL-3.0" \
-            -f ./Dockerfile -t "${IMAGE_NAME}"
+      - name: Generate docker tags/labels from github build context
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # We tag latest only release of the form <variant>-v<major>.<minor>.<patch>-fh2.1 so "rc/beta" version are not flagged as latest
+          # - 2 docker tags: `{geth|bsc|...}-latest` and `{git-tag}`
+          tags: |
+            type=ref,event=tag,priority=1000
+            type=ref,event=branch,priority=1000
+            type=match,pattern=^(.*)-v\d+.\d+.\d+-fh,group=1,suffix=-latest-fh2
+          flavor: |
+            latest=false
 
-      - name: Push image
-        run: |
-          IMAGE_ID=ghcr.io/${{ github.repository }}
-          
-          # Change all uppercase to lowercase
-          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
-          # Strip git ref prefix from version
-          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
-          # Strip "v" prefix from tag name
-          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
-          [ "$VERSION" == "master" ] && VERSION=latest
-          echo IMAGE_ID=$IMAGE_ID
-          echo VERSION=$VERSION
-          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
-          docker tag $IMAGE_NAME $IMAGE_ID:latest
-          docker push $IMAGE_ID:$VERSION
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # org.opencontainers.image.version will match the tag name
+          labels: ${{ steps.meta.outputs.labels }}
