@@ -1620,7 +1620,10 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 	}
 
 	libNum := finalityStatus.LastIrreversibleBlockNumber
-	if finalityStatus.IsEmpty() {
+	if finalityStatus.IsEmpty() || libNum > block.Number {
+		// the 'libNum> > block.Number> is bug fix for a situation that has only been seen once: the first block emitted from a node had a lib in the future
+		// in this case, it is considered invalid and ignored. The next blocks should have correct LIB
+		//
 		// FIXME: We should have access to the genesis block to perform this operation to ensure we never go below the
 		// the genesis block
 		if block.Number >= 200 {
