@@ -317,6 +317,7 @@ func (f *Firehose) OnBlockchainInit(chainConfig *params.ChainConfig) {
 	log.Info("Firehose tracer initialized", "chain_id", chainConfig.ChainID, "apply_backward_compatibility", *f.applyBackwardCompatibility, "protocol_version", FirehoseProtocolVersion)
 }
 
+var gethDevChainID = big.NewInt(1337)
 var mainnetChainID = big.NewInt(1)
 var goerliChainID = big.NewInt(5)
 var sepoliaChainID = big.NewInt(11155111)
@@ -1112,10 +1113,10 @@ func (f *Firehose) callStart(source string, callType pbeth.CallType, from common
 
 	if *f.applyBackwardCompatibility {
 		// Known Firehose issue: The `BeginOrdinal` of the root call is incremented but must
-		// be assigned back to 0 because of a bug in the console reader. remove on new chain.
+		// be assigned back to 0 because of a bug in the console reader.
 		//
-		// New chain integration should remove this `if` statement
-		if source == "root" {
+		// However, system calls are not affected by this bug and must keep their ordinal.
+		if source == "root" && !f.inSystemCall {
 			call.BeginOrdinal = 0
 		}
 	}
@@ -1157,7 +1158,7 @@ func (f *Firehose) getExecutedCode(evm *tracing.VMContext, call *pbeth.Call) boo
 	}
 
 	if precompile {
-		firehoseTrace("executed code isprecompile (callType=%s inputLength=%d)", call.CallType.String(), len(call.Input))
+		firehoseTrace("executed code is precompile (callType=%s inputLength=%d)", call.CallType.String(), len(call.Input))
 		return call.CallType != pbeth.CallType_CREATE && len(call.Input) > 0
 	}
 
@@ -1492,6 +1493,22 @@ func (f *Firehose) OnNewAccount(a common.Address) {
 		return
 	}
 
+	if a == params.SystemAddress {
+		// Old Firehose ignore those, we do the same, this is true only for direct Ethereum (Mainnet, Sepolia and Holesky),
+		// BNB and Polygon do not have this behavior and emits account creations for the system address
+		//
+		// See https://github.com/streamingfast/go-ethereum/blob/30ce26bfaf27af761372409b72c2d58e619775eb/firehose/context.go#L764-L766
+
+		// TODO: Performance wise, does it make sense cache the chain's comparison into a variable directly, to avoid doing all the compares?
+		// Technically the right "behavior" could be computed once at start of tracer and then used everywhere without even needing to check
+		// the chainID as the "behavior" object would have the right behavior for the chain.
+		//
+		// For now, shouldn't be a big deal as `OnNewAccount` on the system address is not a common thing.
+		if f.isChainOneOf(mainnetChainID, sepoliaChainID, holeskyChainID, gethDevChainID) {
+			return
+		}
+	}
+
 	accountCreation := &pbeth.AccountCreation{
 		Account: a.Bytes(),
 		Ordinal: f.blockOrdinal.Next(),
@@ -1647,6 +1664,18 @@ func (f *Firehose) ensureInSystemTx() {
 	if !f.inSystemTx {
 		f.panicInvalidState("caller expected to be in system transaction state but we were not, this is a bug", 2)
 	}
+}
+
+func (f *Firehose) isChainOneOf(chainIDs ...*big.Int) bool {
+	f.ensureBlockChainInit()
+
+	for _, chainID := range chainIDs {
+		if f.chainConfig.ChainID.Cmp(chainID) == 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (f *Firehose) panicInvalidState(msg string, callerSkip int) string {

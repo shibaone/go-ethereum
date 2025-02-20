@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -19,46 +20,6 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 )
-
-func TestFirehoseChain(t *testing.T) {
-	context := vm.BlockContext{
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		Coinbase:    common.Address{},
-		BlockNumber: new(big.Int).SetUint64(uint64(1)),
-		Time:        1,
-		Difficulty:  big.NewInt(2),
-		GasLimit:    uint64(1000000),
-		BaseFee:     big.NewInt(8),
-	}
-
-	tracer, tracingHooks, onClose := newFirehoseTestTracer(t)
-	defer onClose()
-
-	genesis, blockchain, engine := newBlockchain(t, types.GenesisAlloc{}, context, tracingHooks)
-
-	_, blocks, _ := core.GenerateChainWithGenesis(genesis, engine, 1, func(i int, b *core.BlockGen) {
-		b.SetCoinbase(context.Coinbase)
-		b.SetDifficulty(context.Difficulty)
-		b.SetParentBeaconRoot(common.Hash{})
-	})
-
-	blockchain.SetBlockValidatorAndProcessorForTesting(
-		ignoreValidateStateValidator{core.NewBlockValidator(genesis.Config, blockchain)},
-		core.NewStateProcessor(genesis.Config, blockchain.HeaderChain()),
-	)
-
-	n, err := blockchain.InsertChain(blocks)
-	require.NoError(t, err)
-	require.Equal(t, 1, n)
-
-	genesisLine, blockLines, unknownLines := readTracerFirehoseLines(t, tracer)
-	require.Len(t, unknownLines, 0, "Lines:\n%s", strings.Join(slicesMap(unknownLines, func(l unknownLine) string { return "- '" + string(l) + "'" }), "\n"))
-	require.NotNil(t, genesisLine)
-	blockLines.assertEquals(t, filepath.Join("testdata", t.Name()),
-		firehoseBlockLineParams{"1", "cf7d0082c6616f6079dd9ed467fbc925a9032978f65caadc250d9a443436530b", "0", "845bad515694a416bab4b8d44e22cf97a8c894a8502110ab807883940e185ce0", "0", "10000000000"},
-	)
-}
 
 func TestFirehosePrestate(t *testing.T) {
 	testFolders := []string{
@@ -85,7 +46,6 @@ func TestFirehosePrestate(t *testing.T) {
 	}
 
 }
-
 func TestFirehose_EIP7702(t *testing.T) {
 	// Copied from ./core/blockchain_test.go#L4180 (TestEIP7702)
 
@@ -197,17 +157,37 @@ func TestFirehose_EIP7702(t *testing.T) {
 		}
 	})
 
+	assertBlockTracesCorrectly(t, gspec, engine, blocks, "TestEIP7702")
+}
+
+func TestFirehose_SystemCalls(t *testing.T) {
+	gspec := &core.Genesis{
+		Config: params.MergedTestChainConfig,
+	}
+
+	engine := beacon.New(ethash.NewFaker())
+	_, blocks, _ := core.GenerateChainWithGenesis(gspec, engine, 1, func(i int, b *core.BlockGen) {})
+
+	assertBlockTracesCorrectly(t, gspec, engine, blocks, "TestSystemCalls")
+}
+
+func assertBlockTracesCorrectly(t *testing.T, genesisSpec *core.Genesis, engine consensus.Engine, blocks []*types.Block, goldenDir string) {
+	t.Helper()
+
 	tracer, tracingHooks, onClose := newFirehoseTestTracer(t)
 	defer onClose()
 
-	usedGas := uint64(0)
-
-	chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, engine, vm.Config{Tracer: tracingHooks}, nil, &usedGas)
+	chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, genesisSpec, nil, engine, vm.Config{Tracer: tracingHooks}, nil, nil)
 	require.NoError(t, err, "failed to create tester chain")
+
+	chain.SetBlockValidatorAndProcessorForTesting(
+		ignoreValidateStateValidator{core.NewBlockValidator(genesisSpec.Config, chain)},
+		core.NewStateProcessor(genesisSpec.Config, chain.HeaderChain()),
+	)
 
 	defer chain.Stop()
 	n, err := chain.InsertChain(blocks)
 	require.NoError(t, err, "failed to insert chain block %d", n)
 
-	assertBlockEquals(t, tracer, filepath.Join("testdata", "TestEIP7702"), len(blocks))
+	assertBlockEquals(t, tracer, filepath.Join("testdata", goldenDir), len(blocks))
 }

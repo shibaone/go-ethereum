@@ -13,9 +13,6 @@
     "difficulty":  {
       "bytes":  "AA=="
     },
-    "totalDifficulty":  {
-      "bytes":  "AgAA"
-    },
     "number":  "1",
     "gasLimit":  "4712388",
     "gasUsed":  "142021",
@@ -268,6 +265,7 @@
       "address":  "AA899tcygH7xMZ+3uLuFItC+rAI=",
       "gasLimit":  "30000000",
       "input":  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "beginOrdinal":  "1",
       "endOrdinal":  "2"
     },
     {
@@ -277,6 +275,7 @@
       "address":  "AAD5CCfxxToQy3oCM1sXUyAAKTU=",
       "gasLimit":  "30000000",
       "input":  "pWIUj7qpHz/G8tLNdaLNz8Jr1TmoyDxTXP9TdFcxi1w=",
+      "beginOrdinal":  "3",
       "endOrdinal":  "4"
     },
     {
@@ -285,6 +284,7 @@
       "caller":  "//////////////////////////4=",
       "address":  "AAAJYe9IDrVegNGa2DV5pkwAcAI=",
       "gasLimit":  "30000000",
+      "beginOrdinal":  "28",
       "endOrdinal":  "29"
     },
     {
@@ -293,6 +293,7 @@
       "caller":  "//////////////////////////4=",
       "address":  "AAC73cfOSIZC+1efiwDzpZAAclE=",
       "gasLimit":  "30000000",
+      "beginOrdinal":  "30",
       "endOrdinal":  "31"
     }
   ],
