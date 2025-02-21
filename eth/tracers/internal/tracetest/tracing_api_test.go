@@ -154,8 +154,6 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 	blockContext := core.NewEVMBlockContext(block.Header(), prestate, &context.Coinbase)
 	vmenv := vm.NewEVM(blockContext, state.NewHookedState(testState.StateDB, hooks), prestate.Genesis.Config, vm.Config{Tracer: hooks})
 
-	fmt.Println("msg", prestate.Genesis.Config)
-
 	usedGas := uint64(0)
 	_, err = core.ApplyTransactionWithEVM(
 		msg,

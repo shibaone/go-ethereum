@@ -494,7 +494,9 @@ func (s *StateDB) SelfDestruct(addr common.Address) uint256.Int {
 	if stateObject == nil {
 		return prevBalance
 	}
+
 	prevBalance = *(stateObject.Balance())
+	fmt.Printf("StateDB SelfDestruct GetBalance(%s): %s (from stateObject %s)\n", addr, s.GetBalance(addr), &prevBalance)
 	// Regardless of whether it is already destructed or not, we do have to
 	// journal the balance-change, if we set it to zero here.
 	if !stateObject.Balance().IsZero() {

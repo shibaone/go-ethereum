@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -912,8 +913,12 @@ func opSelfdestruct6780(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCon
 	}
 	beneficiary := scope.Stack.pop()
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
+	fmt.Printf("Instructions Contract=%s, Beneficiary=%s\n", scope.Contract.Address(), scope.Contract.Address())
 	interpreter.evm.StateDB.SubBalance(scope.Contract.Address(), balance, tracing.BalanceDecreaseSelfdestruct)
+	fmt.Printf("Instructions Interpreter StateDB GetBalance(%s): %s\n", scope.Contract.Address(), interpreter.evm.StateDB.GetBalance(scope.Contract.Address()))
 	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance, tracing.BalanceIncreaseSelfdestruct)
+	fmt.Printf("Instructions Interpreter StateDB GetBalance(%s): %s\n", common.Address(beneficiary.Bytes20()), interpreter.evm.StateDB.GetBalance(beneficiary.Bytes20()))
+
 	interpreter.evm.StateDB.SelfDestruct6780(scope.Contract.Address())
 	if tracer := interpreter.evm.Config.Tracer; tracer != nil {
 		if tracer.OnEnter != nil {
