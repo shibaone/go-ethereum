@@ -18,6 +18,9 @@
     "receiptRoot": "VugfFxvMVab/g0XmksD4bltI4BuZbK3AAWIvteNjtCE=",
     "stateRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     "timestamp": "2023-06-19T23:23:48Z",
+    "totalDifficulty": {
+      "bytes": "PGVtIwKasA=="
+    },
     "transactionsRoot": "bDCtoar4SKuDMt3K7Ay0vDV8FJj/S9YTAtfuy7yJYL0=",
     "uncleHash": "HcxN6N7HXXqrhbVntszUGtMSRRuUinQT8KFC/UDUk0c="
   },
