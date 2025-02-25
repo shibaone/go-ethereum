@@ -1,0 +1,64 @@
+{
+  "hash": "sHtKHwsp8FMpWYxYTXt7ZVbld6EhNv7H+hGhgv/WnUc=",
+  "header": {
+    "coinbase": "0Em/1mfLRqo+9d8No+V9s7455RE=",
+    "difficulty": {
+      "bytes": "3HvFJQ=="
+    },
+    "gasLimit": "5258985",
+    "hash": "sHtKHwsp8FMpWYxYTXt7ZVbld6EhNv7H+hGhgv/WnUc=",
+    "logsBloom": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "mixHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "number": "2294631",
+    "parentBeaconRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "parentHash": "mS8GrbCdGiFfKeye6I0YRIfEf5cRpqK9s6F3zkoiLQs=",
+    "receiptRoot": "VugfFxvMVab/g0XmksD4bltI4BuZbK3AAWIvteNjtCE=",
+    "stateRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "timestamp": "2017-12-19T09:22:46Z",
+    "transactionsRoot": "va+YjdnNZIkX1EBpXJy/Zx01bFZCgaje9dt+QuyCo5Y=",
+    "uncleHash": "HcxN6N7HXXqrhbVntszUGtMSRRuUinQT8KFC/UDUk0c="
+  },
+  "number": "2294631",
+  "size": "648",
+  "transactionTraces": [
+    {
+      "beginOrdinal": "1",
+      "calls": [
+        {
+          "address": "vDOeYo5v4yw56EOS0IdWeydD6jU=",
+          "beginOrdinal": "5",
+          "callType": "CALL",
+          "caller": "vDOeYo5v4yw56EOS0IdWeydD6jU=",
+          "endOrdinal": "6",
+          "failureReason": "failed deposit transaction",
+          "gasConsumed": "200000",
+          "gasLimit": "200000",
+          "input": "AA==",
+          "stateReverted": true,
+          "statusFailed": true,
+          "statusReverted": true,
+          "value": {
+            "bytes": "GqU109DAAA=="
+          }
+        }
+      ],
+      "endOrdinal": "7",
+      "from": "vDOeYo5v4yw56EOS0IdWeydD6jU=",
+      "gasLimit": "200000",
+      "gasUsed": "200000",
+      "hash": "pHJ3s9kjhOcJBr7XBXI6Fckdnw//L8YCgk0U6iAYAcE=",
+      "input": "AA==",
+      "receipt": {
+        "cumulativeGasUsed": "200000",
+        "logsBloom": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "status": "FAILED",
+      "to": "vDOeYo5v4yw56EOS0IdWeydD6jU=",
+      "type": "TRX_TYPE_OPTIMISM_DEPOSIT",
+      "value": {
+        "bytes": "GqU109DAAA=="
+      }
+    }
+  ],
+  "ver": 4
+}
