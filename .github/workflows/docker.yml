@@ -1,4 +1,4 @@
-name: Build, push and release (if tag)
+name: Build, push and release (if tag).
 
 on:
   push:
