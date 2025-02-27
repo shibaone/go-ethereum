@@ -107,9 +107,9 @@ jobs:
             type=sha,prefix=
             type=edge,branch=firehose-fh3.0,priority=1
             type=edge,branch=release/*,priority=1
+            type=raw,value=optimism-latest-fh3
           flavor: |
-            latest=${{ startsWith(github.ref, 'refs/tags/') && !contains(github.ref, 'beta') && !contains(github.ref, 'rc') }}
-            prefix=geth-,onlatest=true
+            latest=false
           sep-tags: ","
 
       - name: Extract image
