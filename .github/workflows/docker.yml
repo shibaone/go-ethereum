@@ -56,7 +56,7 @@ jobs:
             type=sha,prefix=,suffix=-${{ matrix.platform_suffix }}
             type=edge,branch=firehose-fh3.0,priority=1
             type=edge,branch=release/*,priority=1
-            type=raw,value=optimism-latest-fh3
+            type=match,pattern=^(.*)-v\d+.\d+.\d+-fh,group=1,suffix=-latest-fh3
           flavor: |
             latest=false
 
