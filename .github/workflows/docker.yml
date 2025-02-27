@@ -8,6 +8,7 @@ on:
       # Expected to be <network>/{fix,feature}/<name> where <network> is one of {geth,bsc,polygon,etc.}
       - "*/fix/*"
       - "*/feature/*"
+      - "*/release/*"
 
 env:
   REGISTRY: ghcr.io
