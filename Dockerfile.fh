@@ -23,6 +23,6 @@ COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
 COPY --from=builder /go-ethereum/build/bin/geth /app/geth
 
 COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
-COPY --from=optimism-node /usr/local/bin/op-node /app/unichain-node
+COPY --from=unichain-node /usr/local/bin/op-node /app/unichain-node
 
 ENTRYPOINT /app/geth
