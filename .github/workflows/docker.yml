@@ -1,4 +1,4 @@
-name: Build, push and release (if tag).
+name: Build, push and release (if tag)
 
 on:
   push:
@@ -107,7 +107,7 @@ jobs:
             type=sha,prefix=
             type=edge,branch=firehose-fh3.0,priority=1
             type=edge,branch=release/*,priority=1
-            type=raw,value=optimism-latest-fh3
+            type=raw,value=latest-fh3
           flavor: |
             latest=false
           sep-tags: ","
