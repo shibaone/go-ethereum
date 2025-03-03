@@ -691,6 +691,10 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 
 	trxTrace := f.completeTransaction(receipt)
 
+	if receipt.DepositNonce != nil && trxTrace.Type == types.DepositTxType {
+		trxTrace.Nonce = *receipt.DepositNonce
+	}
+
 	// In this case, we are in some kind of parallel processing and we must simply add the transaction
 	// to a transient storage (and not in the block directly). Adding it to the block will be done by the
 	// `OnTxCommit` callback.
