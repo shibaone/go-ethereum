@@ -37,6 +37,7 @@ const (
 	OPMainnetChainID   = 10
 	BaseMainnetChainID = 8453
 	baseSepoliaChainID = 84532
+	UnichainChainId    = 130
 )
 
 func newUint64(val uint64) *uint64 { return &val }
@@ -92,6 +93,34 @@ var (
 		CancunTime:              newUint64(1707305664),
 		Ethash:                  new(EthashConfig),
 	}
+	// HoleskyChainConfig contains the chain parameters to run a node on the Holesky test network.
+	UnichainMainnetConfig = &ChainConfig{
+		ChainID:                 big.NewInt(130),
+		Optimism:                &OptimismConfig{EIP1559Elasticity: 50, EIP1559Denominator: 10},
+		HomesteadBlock:          big.NewInt(0),
+		DAOForkBlock:            nil,
+		DAOForkSupport:          true,
+		EIP150Block:             big.NewInt(0),
+		EIP155Block:             big.NewInt(0),
+		EIP158Block:             big.NewInt(0),
+		ByzantiumBlock:          big.NewInt(0),
+		ConstantinopleBlock:     big.NewInt(0),
+		PetersburgBlock:         big.NewInt(0),
+		IstanbulBlock:           big.NewInt(0),
+		MuirGlacierBlock:        nil,
+		BerlinBlock:             big.NewInt(0),
+		LondonBlock:             big.NewInt(0),
+		ArrowGlacierBlock:       nil,
+		GrayGlacierBlock:        nil,
+		TerminalTotalDifficulty: big.NewInt(0),
+		MergeNetsplitBlock:      nil,
+		ShanghaiTime:            newUint64(0),
+		CancunTime:              newUint64(0),
+		CanyonTime:              newUint64(0),
+		RegolithTime:            newUint64(0),
+		Ethash:                  new(EthashConfig),
+	}
+
 	// SepoliaChainConfig contains the chain parameters to run a node on the Sepolia test network.
 	SepoliaChainConfig = &ChainConfig{
 		ChainID:                 big.NewInt(11155111),

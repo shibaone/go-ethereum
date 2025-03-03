@@ -1,0 +1,155 @@
+{
+  "hash": "TEN6SBoDPtUA/+zwR/ZwQBovBNGg2OpdXPkwnTSr3Jg=",
+  "header": {
+    "baseFeePerGas": {
+      "bytes": "/A=="
+    },
+    "coinbase": "QgAAAAAAAAAAAAAAAAAAAAAAABE=",
+    "difficulty": {
+      "bytes": "AA=="
+    },
+    "gasLimit": "30000000",
+    "hash": "TEN6SBoDPtUA/+zwR/ZwQBovBNGg2OpdXPkwnTSr3Jg=",
+    "logsBloom": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "mixHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "number": "5000",
+    "parentBeaconRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "parentHash": "MVPp48qk1mRUmUoxpq9FRvO6GxnrZxTrxL0RBKjkCqs=",
+    "receiptRoot": "VugfFxvMVab/g0XmksD4bltI4BuZbK3AAWIvteNjtCE=",
+    "stateRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "timestamp": "2024-11-04T20:49:19Z",
+    "transactionsRoot": "MDeCzBtJs6/WjpR5yhu3ttDuNFSUSN737ND52kCr+Jc=",
+    "uncleHash": "HcxN6N7HXXqrhbVntszUGtMSRRuUinQT8KFC/UDUk0c="
+  },
+  "number": "5000",
+  "size": "803",
+  "transactionTraces": [
+    {
+      "beginOrdinal": "1",
+      "calls": [
+        {
+          "address": "QgAAAAAAAAAAAAAAAAAAAAAAABU=",
+          "beginOrdinal": "4",
+          "callType": "CALL",
+          "caller": "3q3erd6t3q3erd6t3q3erd6tAAE=",
+          "endOrdinal": "17",
+          "executedCode": true,
+          "gasChanges": [
+            {
+              "oldValue": "1000000",
+              "ordinal": "2",
+              "reason": "REASON_INTRINSIC_GAS"
+            },
+            {
+              "newValue": "977396",
+              "ordinal": "5",
+              "reason": "REASON_CALL_INITIAL_BALANCE"
+            },
+            {
+              "newValue": "975064",
+              "oldValue": "975094",
+              "ordinal": "6",
+              "reason": "REASON_CALL_DATA_COPY"
+            },
+            {
+              "newValue": "972448",
+              "oldValue": "974948",
+              "ordinal": "7",
+              "reason": "REASON_STATE_COLD_ACCESS"
+            },
+            {
+              "newValue": "15194",
+              "oldValue": "975048",
+              "ordinal": "8",
+              "reason": "REASON_DELEGATE_CALL"
+            },
+            {
+              "newValue": "956097",
+              "oldValue": "15194",
+              "ordinal": "14",
+              "reason": "REASON_REFUND_AFTER_EXECUTION"
+            },
+            {
+              "newValue": "956086",
+              "oldValue": "956089",
+              "ordinal": "15",
+              "reason": "REASON_RETURN_DATA_COPY"
+            },
+            {
+              "oldValue": "956062",
+              "ordinal": "16",
+              "reason": "REASON_CALL_LEFT_OVER_RETURNED"
+            },
+            {
+              "oldValue": "956062",
+              "ordinal": "18",
+              "reason": "REASON_TX_LEFT_OVER_RETURNED"
+            }
+          ],
+          "gasConsumed": "21334",
+          "gasLimit": "977396",
+          "index": 1,
+          "input": "RApeIAAAB9AADbugAAAAAAAAAAgAAAAAZykzRwAAAAABQjdoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT6T/X0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX9Xa5G36HTjPl76ZZxFCF7veQL0JbxrMXjHZZIGC8jd7zqfAAAAAAAAAAAAAAAAL2ClGExjypT4KicQBkPbq+Tz9/0=",
+          "nonceChanges": [
+            {
+              "address": "3q3erd6t3q3erd6t3q3erd6tAAE=",
+              "newValue": "5000",
+              "oldValue": "4999",
+              "ordinal": "3"
+            }
+          ]
+        },
+        {
+          "address": "wNPA08DTwNPA08DTwNPA08DTABU=",
+          "beginOrdinal": "9",
+          "callType": "DELEGATE",
+          "caller": "QgAAAAAAAAAAAAAAAAAAAAAAABU=",
+          "depth": 1,
+          "endOrdinal": "13",
+          "executedCode": true,
+          "gasChanges": [
+            {
+              "newValue": "957254",
+              "ordinal": "10",
+              "reason": "REASON_CALL_INITIAL_BALANCE"
+            },
+            {
+              "oldValue": "940903",
+              "ordinal": "12",
+              "reason": "REASON_CALL_LEFT_OVER_RETURNED"
+            }
+          ],
+          "gasConsumed": "16351",
+          "gasLimit": "957254",
+          "index": 2,
+          "input": "RApeIAAAB9AADbugAAAAAAAAAAgAAAAAZykzRwAAAAABQjdoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT6T/X0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX9Xa5G36HTjPl76ZZxFCF7veQL0JbxrMXjHZZIGC8jd7zqfAAAAAAAAAAAAAAAAL2ClGExjypT4KicQBkPbq+Tz9/0=",
+          "parentIndex": 1,
+          "storageChanges": [
+            {
+              "address": "QgAAAAAAAAAAAAAAAAAAAAAAABU=",
+              "key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM=",
+              "newValue": "AAAAAAAAAAAAAAAAAAAAAAAAB9AADbugAAAAAAAAAAg=",
+              "oldValue": "AAAAAAAAAAAAAAAAAAAAAAAAB9AADbugAAAAAAAAAAc=",
+              "ordinal": "11"
+            }
+          ]
+        }
+      ],
+      "endOrdinal": "19",
+      "from": "3q3erd6t3q3erd6t3q3erd6tAAE=",
+      "gasLimit": "1000000",
+      "gasUsed": "43938",
+      "hash": "2rUmodQuLvYTDvJBg5ThvN/tqsF9QDR43Auszn1nUJ0=",
+      "input": "RApeIAAAB9AADbugAAAAAAAAAAgAAAAAZykzRwAAAAABQjdoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAT6T/X0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX9Xa5G36HTjPl76ZZxFCF7veQL0JbxrMXjHZZIGC8jd7zqfAAAAAAAAAAAAAAAAL2ClGExjypT4KicQBkPbq+Tz9/0=",
+      "nonce": "4999",
+      "receipt": {
+        "cumulativeGasUsed": "43938",
+        "logsBloom": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "status": "SUCCEEDED",
+      "to": "QgAAAAAAAAAAAAAAAAAAAAAAABU=",
+      "type": "TRX_TYPE_OPTIMISM_DEPOSIT"
+    }
+  ],
+  "ver": 4
+}

@@ -22,9 +22,10 @@ import (
 )
 
 var configByName = map[string]*params.ChainConfig{
-	"mainnet": params.MainnetChainConfig,
-	"sepolia": params.SepoliaChainConfig,
-	"holesky": params.HoleskyChainConfig,
+	"mainnet":          params.MainnetChainConfig,
+	"sepolia":          params.SepoliaChainConfig,
+	"holesky":          params.HoleskyChainConfig,
+	"unichain-mainnet": params.UnichainMainnetConfig,
 }
 
 func main() {
