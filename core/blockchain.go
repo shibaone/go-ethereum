@@ -2398,7 +2398,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		bc.logger.OnBlockStart(tracing.BlockEvent{
 			Block:     block,
 			TD:        td,
-			Finalized: bc.CurrentFinalBlock(),
+			Finalized: finalized,
 			Safe:      bc.CurrentSafeBlock(),
 		})
 	}
