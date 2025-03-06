@@ -2544,10 +2544,6 @@ func shortenAddress(addr *common.Address) string {
 	return full[:6] + ".." + full[len(full)-4:]
 }
 
-func shortenHash(hash common.Hash) string {
-	return hex.EncodeToString(hash[:4]) + ".." + hex.EncodeToString(hash[len(hash)-4:])
-}
-
 func shortenHashBytes(hash []byte) string {
 	if len(hash) <= 8 {
 		return hex.EncodeToString(hash)

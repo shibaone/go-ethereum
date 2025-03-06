@@ -2363,38 +2363,17 @@ type blockProcessingResult struct {
 	status   WriteStatus
 }
 
-type headerView types.Header
-
-func (h *headerView) String() string {
-	if h == nil {
-		return "<nil>"
-	}
-
-	header := (*types.Header)(h)
-	hash := header.Hash()
-
-	return fmt.Sprintf("#%d 0x%X..%X", header.Number, hash[:4], hash[28:])
-}
-
 // processBlock executes and validates the given block. If there was no error
 // it writes the block and associated state to database.
 func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool, interruptCh chan struct{}) (_ *blockProcessingResult, blockEndErr error) {
 	statedb.SetExpectedStateRoot(block.Root())
 
+	// For comparison in defer, was moved out by Firehose patch temporarly
+	finalized := bc.CurrentFinalBlock()
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		td := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 
-		finalized := bc.CurrentFinalBlock()
-		if p, ok := bc.engine.(consensus.PoSA); ok {
-			finalizedRelative := p.GetFinalizedHeader(bc, block.Header())
-			if finalizedRelative.Number != finalized.Number || finalizedRelative.Hash() != finalized.Hash() {
-				log.Info("CurrentFinalBlock() and GetFinalizedHeader(tracedBlock) differs",
-					"current", (*headerView)(finalized),
-					"relative", (*headerView)(finalizedRelative),
-				)
-			}
-		}
-
+		bc.logFinalizedHeaderMismatch("OnBlockStart", finalized, block.Header())
 		bc.logger.OnBlockStart(tracing.BlockEvent{
 			Block:     block,
 			TD:        td,
@@ -2404,6 +2383,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	}
 	if bc.logger != nil && bc.logger.OnBlockEnd != nil {
 		defer func() {
+			bc.logFinalizedHeaderMismatch("OnBlockEnd", finalized, block.Header())
 			bc.logger.OnBlockEnd(blockEndErr)
 		}()
 	}
