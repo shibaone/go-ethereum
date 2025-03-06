@@ -1872,6 +1872,28 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 		} else {
 			libNum = 0
 		}
+	} else {
+		// BNB has an issue on LIB where sometimes, it appears that some block will be emitted
+		// with a LIB that is 1 or 2 blocks lower than a previous LIB that was sent. For example
+		// we get Block #100 (LIB #98) -> Block #100 (LIB #97).
+		if f.blockFinality.HighestIrreversibleBlockNumber != nil && libNum < *f.blockFinality.HighestIrreversibleBlockNumber {
+			log.Error("Firehose traced block's LIB is lower than highest LIB seen so far",
+				"block", block.Number,
+				"block_hash", shortenHashBytes(block.Hash),
+				"parent", block.Number-1,
+				"parent_hash", shortenHashBytes(block.Header.ParentHash),
+				"lib_num", libNum,
+				"lib_hash", shortenHashBytes(finalityStatus.LastIrreversibleBlockHash),
+				"highest_lib_num", *f.blockFinality.HighestIrreversibleBlockNumber,
+				"highest_lib_hash", shortenHashBytes(*f.blockFinality.HighestIrreversibleBlockHash),
+			)
+
+			// delta := *f.blockFinality.HighestIrreversibleBlockNumber - libNum
+			// if delta == 1 {
+			// 	log.Warn("Firehose adjusted LIB back to highest seen LIB seen so far")
+			// 	libNum = *f.blockFinality.HighestIrreversibleBlockNumber
+			// }
+		}
 	}
 
 	// **Important* The final space in the Sprintf template is mandatory!
@@ -2522,6 +2544,18 @@ func shortenAddress(addr *common.Address) string {
 	return full[:6] + ".." + full[len(full)-4:]
 }
 
+func shortenHash(hash common.Hash) string {
+	return hex.EncodeToString(hash[:4]) + ".." + hex.EncodeToString(hash[len(hash)-4:])
+}
+
+func shortenHashBytes(hash []byte) string {
+	if len(hash) <= 8 {
+		return hex.EncodeToString(hash)
+	}
+
+	return hex.EncodeToString(hash[:4]) + ".." + hex.EncodeToString(hash[len(hash)-4:])
+}
+
 type inputView []byte
 
 func (b inputView) String() string {
@@ -2626,6 +2660,9 @@ func firehoseBigIntFromNativeExplicitZero(in *big.Int) *pbeth.BigInt {
 type FinalityStatus struct {
 	LastIrreversibleBlockNumber uint64
 	LastIrreversibleBlockHash   []byte
+
+	HighestIrreversibleBlockNumber *uint64
+	HighestIrreversibleBlockHash   *[]byte
 }
 
 func (s *FinalityStatus) populate(finalNumber uint64, finalHash []byte) {
@@ -2641,6 +2678,11 @@ func (s *FinalityStatus) populateFromChain(finalHeader *types.Header) {
 
 	s.LastIrreversibleBlockNumber = finalHeader.Number.Uint64()
 	s.LastIrreversibleBlockHash = finalHeader.Hash().Bytes()
+
+	if s.HighestIrreversibleBlockNumber == nil || *s.HighestIrreversibleBlockNumber < s.LastIrreversibleBlockNumber {
+		s.HighestIrreversibleBlockNumber = &s.LastIrreversibleBlockNumber
+		s.HighestIrreversibleBlockHash = &s.LastIrreversibleBlockHash
+	}
 }
 
 func (s *FinalityStatus) Reset() {
