@@ -1857,6 +1857,9 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 			libNum = 0
 		}
 	}
+	if block.Number-libNum >= 200 {
+		libNum = block.Number - 200
+	}
 
 	// **Important* The final space in the Sprintf template is mandatory!
 	f.outputBuffer.WriteString(fmt.Sprintf("FIRE BLOCK %d %s %d %s %d %d ", block.Number, hex.EncodeToString(block.Hash), previousNum, previousHash, libNum, block.MustTime().UnixNano()))
