@@ -2,11 +2,9 @@ name: Release
 
 on:
   push:
-    # Publish `bnb-v1.2.3` tags as releases.
+    # Publish `v1.2.3` tags as releases.
     tags:
-      - "[a-z0-9]+-v*"
-      - "!**.docker"
-
+      - v*
 env:
   CGO_CFLAGS: "-O -D__BLST_PORTABLE__"
   CGO_CFLAGS_ALLOW: "-O -D__BLST_PORTABLE__"
@@ -17,7 +15,7 @@ jobs:
     strategy:
       matrix:
         go-version: [1.23.x]
-        os: [ubuntu-24.04, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Code
@@ -30,6 +28,11 @@ jobs:
 
       - uses: actions/cache@v3
         with:
+          # In order:
+          # * Module download cache
+          # * Build cache (Linux)
+          # * Build cache (Mac)
+          # * Build cache (Windows)
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
@@ -44,24 +47,34 @@ jobs:
       # ==============================
 
       - name: Build Binary for ${{matrix.os}}
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          go mod download
+          wget https://musl.cc/x86_64-linux-musl-cross.tgz
+          tar -xvf ./x86_64-linux-musl-cross.tgz
+          GIT_COMMIT=$(git rev-parse HEAD)
+          GIT_COMMIT_DATE=$(git log -n1 --pretty='format:%cd' --date=format:'%Y%m%d')
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 CC=$(pwd)/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc go build -ldflags "-X main.gitCommit=$GIT_COMMIT -X main.gitDate=$GIT_COMMIT_DATE -extldflags=-static" -o ./build/bin/geth -a ./cmd/geth
+      
+      - name: Build Binary for ${{matrix.os}}
+        if: matrix.os != 'ubuntu-latest'
         run: |
           go mod download
           make geth
 
-      ## ==============================
-      ##       Cross Compile for ARM
-      ## ==============================
+      # ==============================
+      #       Cross Compile for ARM
+      # ==============================
 
-      # disabled for firehose builds
-      #- name: Build Binary for ARM
-      #  if: matrix.os == 'ubuntu-latest'
-      #  run: |
-      #    go mod download
-      #    wget https://musl.cc/aarch64-linux-musl-cross.tgz
-      #    tar -xvf ./aarch64-linux-musl-cross.tgz
-      #    GIT_COMMIT=$(git rev-parse HEAD)
-      #    GIT_COMMIT_DATE=$(git log -n1 --pretty='format:%cd' --date=format:'%Y%m%d')
-      #    GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC=$(pwd)/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc go build -ldflags "-X main.gitCommit=$GIT_COMMIT -X main.gitDate=$GIT_COMMIT_DATE -extldflags=-static" -o ./build/bin/geth-linux-arm64 -a ./cmd/geth
+      - name: Build Binary for ARM
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          go mod download
+          wget https://musl.cc/aarch64-linux-musl-cross.tgz
+          tar -xvf ./aarch64-linux-musl-cross.tgz
+          GIT_COMMIT=$(git rev-parse HEAD)
+          GIT_COMMIT_DATE=$(git log -n1 --pretty='format:%cd' --date=format:'%Y%m%d')
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC=$(pwd)/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc go build -ldflags "-X main.gitCommit=$GIT_COMMIT -X main.gitDate=$GIT_COMMIT_DATE -extldflags=-static" -o ./build/bin/geth-linux-arm64 -a ./cmd/geth
 
       # ==============================
       #       Upload artifacts
@@ -69,7 +82,7 @@ jobs:
 
       - name: Upload Linux Build
         uses: actions/upload-artifact@v4.3.3
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'ubuntu-latest'
         with:
           name: linux
           path: ./build/bin/geth
@@ -80,25 +93,25 @@ jobs:
         with:
           name: macos
           path: ./build/bin/geth
+      
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4.3.3
+        if: matrix.os == 'windows-latest'
+        with:
+          name: windows
+          path: ./build/bin/geth.exe
 
-      # - name: Upload Windows Build
-      #   uses: actions/upload-artifact@v4.3.3
-      #   if: matrix.os == 'windows-latest'
-      #   with:
-      #     name: windows
-      #     path: ./build/bin/geth.exe
-
-      # - name: Upload ARM-64 Build
-      #   uses: actions/upload-artifact@v4.3.3
-      #   if: matrix.os == 'ubuntu-latest'
-      #   with:
-      #     name: arm64
-      #     path: ./build/bin/geth-linux-arm64
+      - name: Upload ARM-64 Build
+        uses: actions/upload-artifact@v4.3.3
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: arm64
+          path: ./build/bin/geth-linux-arm64
 
   release:
     name: Release
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Set Env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
@@ -106,37 +119,41 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      # ==============================
+      #       Download artifacts
+      # ==============================
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.7
         with:
           name: linux
           path: ./linux
-
+      
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.7
         with:
           name: macos
           path: ./macos
-
-      # - name: Download Artifacts
-      #   uses: actions/download-artifact@v4.1.7
-      #   with:
-      #     name: windows
-      #     path: ./windows
-
-      # - name: Download Artifacts
-      #   uses: actions/download-artifact@v4.1.7
-      #   with:
-      #     name: arm64
-      #     path: ./arm64
-
-      # - name: Download Config File
-      #   run: |
-      #     . ./.github/release.env
-      #     echo "mainnet.zip url: $MAINNET_FILE_URL"
-      #     echo "testnet.zip url: $TESTNET_FILE_URL"
-      #     curl -L $MAINNET_FILE_URL -o ./mainnet.zip
-      #     curl -L $TESTNET_FILE_URL -o ./testnet.zip
+      
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: windows
+          path: ./windows
+      
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4.1.7
+        with:
+          name: arm64
+          path: ./arm64
+      
+      - name: Download Config File
+        run: |
+          . ./.github/release.env
+          echo "mainnet.zip url: $MAINNET_FILE_URL"
+          echo "testnet.zip url: $TESTNET_FILE_URL"
+          curl -L $MAINNET_FILE_URL -o ./mainnet.zip
+          curl -L $TESTNET_FILE_URL -o ./testnet.zip
       # ==============================
       #       Create release
       # ==============================
@@ -144,7 +161,7 @@ jobs:
         id: changelog
         run: |
           chmod 755 ./.github/generate_change_log.sh
-          CHANGELOG=$(./.github/generate_change_log.sh ${{ env.RELEASE_VERSION }})
+          CHANGELOG=$(./.github/generate_change_log.sh ${{ env.RELEASE_VERSION}})
           echo "CHANGELOG<<EOF" >> $GITHUB_ENV
           echo "$CHANGELOG" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
@@ -153,10 +170,7 @@ jobs:
       - run: |
           mv ./linux/geth ./linux/geth_linux
           mv ./macos/geth ./macos/geth_macos
-        # mv ./windows/geth.exe ./windows/geth_windows.exe
-
-      # Check downloaded files
-      - run: ls
+          mv ./windows/geth.exe ./windows/geth_windows.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -170,7 +184,9 @@ jobs:
           draft: false
           prerelease: false
           files: |
+            ./mainnet.zip
+            ./testnet.zip
             ./linux/geth_linux
             ./macos/geth_macos
-            #./windows/geth_windows.exe
-            #./arm64/geth-linux-arm64
+            ./windows/geth_windows.exe
+            ./arm64/geth-linux-arm64
