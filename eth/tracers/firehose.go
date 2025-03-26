@@ -1589,7 +1589,7 @@ func (f *Firehose) InternalTestingBuffer() *bytes.Buffer {
 }
 
 // FIXME: Create a unit test that is going to fail as soon as any header is added in
-func newBlockHeaderFromChainHeader(h *types.Header, td *pbeth.BigInt) *pbeth.BlockHeader {
+func newBlockHeaderFromChainHeader(h *types.Header, _ *pbeth.BigInt) *pbeth.BlockHeader {
 	var withdrawalsHashBytes []byte
 	if hash := h.WithdrawalsHash; hash != nil {
 		withdrawalsHashBytes = hash.Bytes()
@@ -1611,7 +1611,7 @@ func newBlockHeaderFromChainHeader(h *types.Header, td *pbeth.BigInt) *pbeth.Blo
 		ReceiptRoot:      h.ReceiptHash.Bytes(),
 		LogsBloom:        h.Bloom.Bytes(),
 		Difficulty:       firehoseBigIntFromNative(h.Difficulty),
-		TotalDifficulty:  td,
+		TotalDifficulty:  nil,
 		GasLimit:         h.GasLimit,
 		GasUsed:          h.GasUsed,
 		Timestamp:        timestamppb.New(time.Unix(int64(h.Time), 0)),
