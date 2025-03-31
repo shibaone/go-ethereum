@@ -1894,6 +1894,17 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 			// 	libNum = *f.blockFinality.HighestIrreversibleBlockNumber
 			// }
 		}
+
+		// On BSC Mainnet, we manually adjust the LIB to be 25 blocks behind the current block
+		// if the actual delta is lower than 25 blocks. This avoids some problem we face on production
+		// where the LIB, sometimes on heavy fork situations, is wrong and we started marking forked
+		// blocks as irreversible.
+		if block.Number > 25 {
+			libDelta := block.Number - libNum
+			if libDelta <= 25 {
+				libNum = block.Number - 25
+			}
+		}
 	}
 
 	// **Important* The final space in the Sprintf template is mandatory!
