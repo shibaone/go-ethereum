@@ -75,12 +75,17 @@ type MevConfig struct {
 	Builders              []BuilderConfig // The list of builders
 	ValidatorCommission   uint64          // 100 means the validator claims 1% from block reward
 	BidSimulationLeftOver time.Duration
+	NoInterruptLeftOver   time.Duration
+	MaxBidsPerBuilder     uint32 // Maximum number of bids allowed per builder per block
 }
 
 var DefaultMevConfig = MevConfig{
 	Enabled:               false,
+	GreedyMergeTx:         true,
 	SentryURL:             "",
 	Builders:              nil,
 	ValidatorCommission:   100,
 	BidSimulationLeftOver: 50 * time.Millisecond,
+	NoInterruptLeftOver:   400 * time.Millisecond,
+	MaxBidsPerBuilder:     3,
 }
