@@ -735,7 +735,6 @@ func doDockerBuildx(cmdline []string) {
 		tags = []string{"latest"}
 	case strings.HasPrefix(env.Tag, "v1."):
 		tags = []string{"stable", fmt.Sprintf("release-%v", version.Family), "v" + version.Semantic}
-
 	case strings.HasPrefix(env.Branch, "firehose") || strings.HasPrefix(env.Branch, "release/"):
 		tags = []string{"edge-fh" + tracers.FirehoseProtocolVersion}
 	case strings.Contains(env.Tag, "fh"):
