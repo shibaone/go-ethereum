@@ -2192,6 +2192,7 @@ var gasChangeReasonToPb = map[tracing.GasChangeReason]pbeth.GasChange_Reason{
 	tracing.GasChangeWitnessContractCreation:       pbeth.GasChange_REASON_WITNESS_CONTRACT_CREATION,
 	tracing.GasChangeWitnessCodeChunk:              pbeth.GasChange_REASON_WITNESS_CODE_CHUNK,
 	tracing.GasChangeWitnessContractCollisionCheck: pbeth.GasChange_REASON_WITNESS_CONTRACT_COLLISION_CHECK,
+	tracing.GasChangeTxDataFloor:                   pbeth.GasChange_REASON_TX_DATA_FLOOR,
 
 	// Ignored, we track them manually, [newGasChange] ensure that we panic if we see Unknown
 	tracing.GasChangeCallOpCode: pbeth.GasChange_REASON_UNKNOWN,
