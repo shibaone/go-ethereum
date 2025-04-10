@@ -112,8 +112,10 @@ func (c *callContext) toBlockContext(genesis *core.Genesis) vm.BlockContext {
 	}
 
 	if genesis.ExcessBlobGas != nil && genesis.BlobGasUsed != nil {
-		excessBlobGas := eip4844.CalcExcessBlobGas(*genesis.ExcessBlobGas, *genesis.BlobGasUsed)
-		context.BlobBaseFee = eip4844.CalcBlobFee(excessBlobGas)
+		header := &types.Header{Number: genesis.Config.LondonBlock, Time: *genesis.Config.CancunTime}
+		excess := eip4844.CalcExcessBlobGas(genesis.Config, header, genesis.Timestamp)
+		header.ExcessBlobGas = &excess
+		context.BlobBaseFee = eip4844.CalcBlobFee(genesis.Config, header)
 	}
 	return context
 }

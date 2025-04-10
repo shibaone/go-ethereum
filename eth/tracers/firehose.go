@@ -2162,8 +2162,8 @@ var balanceChangeReasonToPb = map[tracing.BalanceChangeReason]pbeth.BalanceChang
 	tracing.BalanceDecreaseSelfdestructBurn:     pbeth.BalanceChange_REASON_BURN,
 	tracing.BalanceIncreaseWithdrawal:           pbeth.BalanceChange_REASON_WITHDRAWAL,
 	tracing.BalanceMint:                         pbeth.BalanceChange_REASON_INCREASE_MINT,
-
-	tracing.BalanceChangeUnspecified: pbeth.BalanceChange_REASON_UNKNOWN,
+	tracing.BalanceChangeRevert:                 pbeth.BalanceChange_REASON_REVERT,
+	tracing.BalanceChangeUnspecified:            pbeth.BalanceChange_REASON_UNKNOWN,
 }
 
 func balanceChangeReasonFromChain(reason tracing.BalanceChangeReason) pbeth.BalanceChange_Reason {
