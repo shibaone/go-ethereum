@@ -691,9 +691,13 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 
 	trxTrace := f.completeTransaction(receipt)
 
+	firehoseDebug("after complete transaction")
+
 	if receipt.DepositNonce != nil && trxTrace.Type == types.DepositTxType {
 		trxTrace.Nonce = *receipt.DepositNonce
 	}
+
+	firehoseDebug("after nonce")
 
 	// In this case, we are in some kind of parallel processing and we must simply add the transaction
 	// to a transient storage (and not in the block directly). Adding it to the block will be done by the
@@ -701,12 +705,16 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 	if f.transactionIsolated {
 		f.transactionTransient = trxTrace
 
+		firehoseDebug("after all in isolated transaction")
+
 		// We must not reset transaction here. In the isolated transaction tracer, the transaction is reset
 		// by the `OnTxReset` callback which comes from outside the tracer. Second, resetting the transaction
 		// also resets the [f.transactionTransient] field which is the one we want to keep on completion
 		// of an isolated transaction.
 	} else {
 		f.block.TransactionTraces = append(f.block.TransactionTraces, trxTrace)
+
+		firehoseDebug("before reset transaction")
 
 		// The reset must be done as the very last thing as the CallStack needs to be
 		// properly populated for the `completeTransaction` call above to complete correctly.
@@ -765,6 +773,8 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 		f.transaction.Status = pbeth.TransactionTraceStatus_FAILED
 	}
 
+	firehoseDebug("after receipt if")
+
 	// Today, we follow what the RPC returns, so we do not set REVERTED, and set it to FAILED
 	if *f.applyBackwardCompatibility {
 		// It's possible that the transaction was reverted, but we still have a receipt, in that case, we must
@@ -774,10 +784,16 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 		}
 	}
 
+	firehoseDebug("after apply backward")
+
 	// Order is important, we must populate the state reverted before we remove the log block index and re-assign ordinals
 	f.populateStateReverted()
+	firehoseDebug("after populated state reverted")
+
 	f.removeLogBlockIndexOnStateRevertedCalls()
+	firehoseDebug("after remove log block index")
 	f.assignOrdinalAndIndexToReceiptLogs()
+	firehoseDebug("after assign ordinal and index to logs")
 
 	if *f.applyBackwardCompatibility {
 		// Known Firehose issue: This field has never been populated in the old Firehose instrumentation
