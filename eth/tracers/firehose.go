@@ -749,6 +749,7 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 
 	if !f.deferredCallState.IsEmpty() {
 		if err := f.deferredCallState.MaybePopulateCallAndReset("root", rootCall); err != nil {
+			firehoseDebug("failed to populate deferred call state: %v", err)
 			panic(err)
 		}
 	}
