@@ -910,12 +910,14 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 			f.block.Number,
 			len(callLogs))
 
+		debug.PrintStack()
 		panic(fmt.Errorf(
 			"mismatch between Firehose call logs and Ethereum transaction %s receipt logs at block #%d, the transaction has no receipt (failed) so there is no logs but it exists %d Firehose call logs",
 			hex.EncodeToString(trx.Hash),
 			f.block.Number,
 			len(callLogs),
 		))
+
 	} else {
 		receiptsLogs = trx.Receipt.Logs
 	}
