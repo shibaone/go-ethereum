@@ -725,6 +725,7 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 	})
 
 	if len(f.transaction.Calls) == 0 &&
+		receipt != nil &&
 		receipt.Status == types.ReceiptStatusFailed &&
 		f.transaction.Type == pbeth.TransactionTrace_TRX_TYPE_OPTIMISM_DEPOSIT {
 		f.transaction.Calls = append(f.transaction.Calls, &pbeth.Call{
