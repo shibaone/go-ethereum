@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/holiman/uint256"
 	pbeth "github.com/streamingfast/firehose-ethereum/types/pb/sf/ethereum/type/v2"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
@@ -97,6 +96,10 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		// but Firehose needs them so we add handling for them in our patch.
 		OnSystemCallStart: tracer.OnSystemCallStart,
 		OnSystemCallEnd:   tracer.OnSystemCallEnd,
+
+		// Temporary to try to overcome the diff around keccak preimages
+		// diff with older Firehose tracer.
+		OnKeccakPreimage: tracer.OnKeccakPreimage,
 	}
 }
 
@@ -1149,8 +1152,10 @@ func (f *Firehose) OnOpcode(pc uint64, op byte, gas, cost uint64, scope tracing.
 		}
 
 		switch opCode {
-		case vm.KECCAK256:
-			f.onOpcodeKeccak256(activeCall, scope.StackData(), Memory(scope.MemoryData()))
+		// Firehose KeccakPreimage Issue: Temporary fix, called via OnKeccakPreimage directly instead until
+		// we understand why we have extra keccak preimages in new version
+		// case vm.KECCAK256:
+		// 	f.onOpcodeKeccak256(activeCall, scope.StackData(), Memory(scope.MemoryData()))
 
 		case vm.SELFDESTRUCT:
 			f.ensureInCall()
@@ -1159,24 +1164,15 @@ func (f *Firehose) OnOpcode(pc uint64, op byte, gas, cost uint64, scope tracing.
 	}
 }
 
-// onOpcodeKeccak256 is called during the SHA3 (a.k.a KECCAK256) opcode it's known
-// in Firehose tracer as Keccak preimages. The preimage is the input data that
-// was used to produce the given keccak hash.
-func (f *Firehose) onOpcodeKeccak256(call *pbeth.Call, stack []uint256.Int, memory Memory) {
-	if call.KeccakPreimages == nil {
-		call.KeccakPreimages = make(map[string]string)
+func (f *Firehose) OnKeccakPreimage(hash common.Hash, data []byte) {
+	f.ensureInBlockAndInTrxAndInCall()
+
+	activeCall := f.callStack.Peek()
+	if activeCall.KeccakPreimages == nil {
+		activeCall.KeccakPreimages = make(map[string]string)
 	}
 
-	offset, size := stack[len(stack)-1], stack[len(stack)-2]
-	preImage := memory.GetPtrUint256(&offset, &size)
-
-	// We should have exclusive access to the hasher, we can safely reset it.
-	f.hasher.Reset()
-	f.hasher.Write(preImage)
-	f.hasher.Read(f.hasherBuf[:])
-
-	encodedData := hex.EncodeToString(preImage)
-
+	encodedData := hex.EncodeToString(data)
 	if *f.applyBackwardCompatibility {
 		// Known Firehose issue: It appears the old Firehose instrumentation have a bug
 		// where when the keccak256 preimage is empty, it is written as "." which is
@@ -1189,8 +1185,41 @@ func (f *Firehose) onOpcodeKeccak256(call *pbeth.Call, stack []uint256.Int, memo
 		}
 	}
 
-	call.KeccakPreimages[hex.EncodeToString(f.hasherBuf[:])] = encodedData
+	activeCall.KeccakPreimages[hex.EncodeToString(hash.Bytes())] = encodedData
 }
+
+// // onOpcodeKeccak256 is called during the SHA3 (a.k.a KECCAK256) opcode it's known
+// // in Firehose tracer as Keccak preimages. The preimage is the input data that
+// // was used to produce the given keccak hash.
+// func (f *Firehose) onOpcodeKeccak256(call *pbeth.Call, stack []uint256.Int, memory Memory) {
+// 	if call.KeccakPreimages == nil {
+// 		call.KeccakPreimages = make(map[string]string)
+// 	}
+
+// 	offset, size := stack[len(stack)-1], stack[len(stack)-2]
+// 	preImage := memory.GetPtrUint256(&offset, &size)
+
+// 	// We should have exclusive access to the hasher, we can safely reset it.
+// 	f.hasher.Reset()
+// 	f.hasher.Write(preImage)
+// 	f.hasher.Read(f.hasherBuf[:])
+
+// 	encodedData := hex.EncodeToString(preImage)
+
+// 	if *f.applyBackwardCompatibility {
+// 		// Known Firehose issue: It appears the old Firehose instrumentation have a bug
+// 		// where when the keccak256 preimage is empty, it is written as "." which is
+// 		// completely wrong.
+// 		//
+// 		// To keep the same behavior, we will write the preimage as a "." when the encoded
+// 		// data is an empty string.
+// 		if encodedData == "" {
+// 			encodedData = "."
+// 		}
+// 	}
+
+// 	call.KeccakPreimages[hex.EncodeToString(f.hasherBuf[:])] = encodedData
+// }
 
 var opCodeToGasChangeReasonMap = map[vm.OpCode]pbeth.GasChange_Reason{
 	vm.CREATE:         pbeth.GasChange_REASON_CONTRACT_CREATION,
@@ -2824,28 +2853,28 @@ func ptr[T any](t T) *T {
 	return &t
 }
 
-type Memory []byte
+// type Memory []byte
 
-func (m Memory) GetPtrUint256(offset, size *uint256.Int) []byte {
-	return m.GetPtr(int64(offset.Uint64()), int64(size.Uint64()))
-}
+// func (m Memory) GetPtrUint256(offset, size *uint256.Int) []byte {
+// 	return m.GetPtr(int64(offset.Uint64()), int64(size.Uint64()))
+// }
 
-func (m Memory) GetPtr(offset, size int64) []byte {
-	if size == 0 {
-		return nil
-	}
+// func (m Memory) GetPtr(offset, size int64) []byte {
+// 	if size == 0 {
+// 		return nil
+// 	}
 
-	if len(m) >= (int(offset) + int(size)) {
-		return m[offset : offset+size]
-	}
+// 	if len(m) >= (int(offset) + int(size)) {
+// 		return m[offset : offset+size]
+// 	}
 
-	// The EVM does memory expansion **after** notifying us about OnOpcode which we use
-	// to compute Keccak256 pre-images now. This creates problem when we want to retrieve
-	// the preimage data because the memory is not expanded yet but in the EVM is going to
-	// work because the memory is going to be expanded before the operation is actually
-	// executed so the memory will be of the correct size.
-	//
-	// In this situtation, we must pad with zeroes when the memory is not big enough.
-	reminder := m[offset:]
-	return append(reminder, make([]byte, int(size)-len(reminder))...)
-}
+// 	// The EVM does memory expansion **after** notifying us about OnOpcode which we use
+// 	// to compute Keccak256 pre-images now. This creates problem when we want to retrieve
+// 	// the preimage data because the memory is not expanded yet but in the EVM is going to
+// 	// work because the memory is going to be expanded before the operation is actually
+// 	// executed so the memory will be of the correct size.
+// 	//
+// 	// In this situtation, we must pad with zeroes when the memory is not big enough.
+// 	reminder := m[offset:]
+// 	return append(reminder, make([]byte, int(size)-len(reminder))...)
+// }

@@ -215,6 +215,10 @@ type Hooks struct {
 	OnLog           LogHook
 	// Block hash read
 	OnBlockHashRead BlockHashReadHook
+
+	// Temporary fix to try to align with older Arbitrum Firehose instrumentation until we understand why it creates
+	// differences in Arbitrum.
+	OnKeccakPreimage func(hash common.Hash, preimage []byte)
 }
 
 // BalanceChangeReason is used to indicate the reason for a balance change, useful
