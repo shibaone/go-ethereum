@@ -878,6 +878,8 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		firehoseTrace("assigning ordinal and index to logs terminated")
 	}()
 
+	firehoseDebug("assigning ordinal and index to logs")
+
 	trx := f.transaction
 
 	callLogs := []*pbeth.Log{}
@@ -893,6 +895,8 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		return cmp.Compare(i.Ordinal, j.Ordinal)
 	})
 
+	firehoseDebug("before transaction receipt logs")
+
 	// When a transaction failed the receipt can be nil, so we need to deal with this
 	var receiptsLogs []*pbeth.Log
 	if trx.Receipt == nil {
@@ -900,6 +904,8 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 			// No logs in the transaction (nor in calls), nothing to do
 			return
 		}
+
+		firehoseDebug("transaction failed, but has logs, we need to check the call logs")
 
 		panic(fmt.Errorf(
 			"mismatch between Firehose call logs and Ethereum transaction %s receipt logs at block #%d, the transaction has no receipt (failed) so there is no logs but it exists %d Firehose call logs",
@@ -911,6 +917,8 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		receiptsLogs = trx.Receipt.Logs
 	}
 
+	firehoseDebug("mistmarch logs")
+
 	if len(callLogs) != len(receiptsLogs) {
 		panic(fmt.Errorf(
 			"mismatch between Firehose call logs and Ethereum transaction %s receipt logs at block #%d, transaction receipt has %d logs but there is %d Firehose call logs",
@@ -920,6 +928,8 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 			len(callLogs),
 		))
 	}
+
+	firehoseDebug("for/loop")
 
 	for i := 0; i < len(callLogs); i++ {
 		callLog := callLogs[i]
@@ -939,6 +949,8 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		receiptsLog.Index = callLog.Index
 		receiptsLog.Ordinal = callLog.Ordinal
 	}
+
+	firehoseDebug("after for/loop")
 }
 
 func (f *Firehose) noTopicsLogOnFailedCallSetToEmptyHash() {
