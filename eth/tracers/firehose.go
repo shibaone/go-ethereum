@@ -694,13 +694,9 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 
 	trxTrace := f.completeTransaction(receipt)
 
-	firehoseDebug("after complete transaction")
-
 	if receipt.DepositNonce != nil && trxTrace.Type == types.DepositTxType {
 		trxTrace.Nonce = *receipt.DepositNonce
 	}
-
-	firehoseDebug("after nonce")
 
 	// In this case, we are in some kind of parallel processing and we must simply add the transaction
 	// to a transient storage (and not in the block directly). Adding it to the block will be done by the
@@ -708,16 +704,12 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 	if f.transactionIsolated {
 		f.transactionTransient = trxTrace
 
-		firehoseDebug("after all in isolated transaction")
-
 		// We must not reset transaction here. In the isolated transaction tracer, the transaction is reset
 		// by the `OnTxReset` callback which comes from outside the tracer. Second, resetting the transaction
 		// also resets the [f.transactionTransient] field which is the one we want to keep on completion
 		// of an isolated transaction.
 	} else {
 		f.block.TransactionTraces = append(f.block.TransactionTraces, trxTrace)
-
-		firehoseDebug("before reset transaction")
 
 		// The reset must be done as the very last thing as the CallStack needs to be
 		// properly populated for the `completeTransaction` call above to complete correctly.
@@ -760,7 +752,6 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 
 	if !f.deferredCallState.IsEmpty() {
 		if err := f.deferredCallState.MaybePopulateCallAndReset("root", rootCall); err != nil {
-			firehoseDebug("failed to populate deferred call state: %v", err)
 			panic(err)
 		}
 	}
@@ -776,8 +767,6 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 		f.transaction.Status = pbeth.TransactionTraceStatus_FAILED
 	}
 
-	firehoseDebug("after receipt if")
-
 	// Today, we follow what the RPC returns, so we do not set REVERTED, and set it to FAILED
 	if *f.applyBackwardCompatibility {
 		// It's possible that the transaction was reverted, but we still have a receipt, in that case, we must
@@ -787,16 +776,10 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 		}
 	}
 
-	firehoseDebug("after apply backward")
-
 	// Order is important, we must populate the state reverted before we remove the log block index and re-assign ordinals
 	f.populateStateReverted()
-	firehoseDebug("after populated state reverted")
-
 	f.removeLogBlockIndexOnStateRevertedCalls()
-	firehoseDebug("after remove log block index")
 	f.assignOrdinalAndIndexToReceiptLogs()
-	firehoseDebug("after assign ordinal and index to logs")
 
 	if *f.applyBackwardCompatibility {
 		// Known Firehose issue: This field has never been populated in the old Firehose instrumentation
@@ -881,8 +864,6 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		firehoseTrace("assigning ordinal and index to logs terminated")
 	}()
 
-	firehoseDebug("assigning ordinal and index to logs")
-
 	trx := f.transaction
 
 	callLogs := []*pbeth.Log{}
@@ -898,8 +879,6 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		return cmp.Compare(i.Ordinal, j.Ordinal)
 	})
 
-	firehoseDebug("before transaction receipt logs")
-
 	// When a transaction failed the receipt can be nil, so we need to deal with this
 	var receiptsLogs []*pbeth.Log
 	if trx.Receipt == nil {
@@ -908,24 +887,15 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 			return
 		}
 
-		firehoseDebug("mismatch between Firehose call logs and Ethereum transaction %s receipt logs at block #%d, the transaction has no receipt (failed) so there is no logs but it exists %d Firehose call logs",
-			hex.EncodeToString(trx.Hash),
-			f.block.Number,
-			len(callLogs))
-
-		debug.PrintStack()
 		panic(fmt.Errorf(
 			"mismatch between Firehose call logs and Ethereum transaction %s receipt logs at block #%d, the transaction has no receipt (failed) so there is no logs but it exists %d Firehose call logs",
 			hex.EncodeToString(trx.Hash),
 			f.block.Number,
 			len(callLogs),
 		))
-
 	} else {
 		receiptsLogs = trx.Receipt.Logs
 	}
-
-	firehoseDebug("mistmarch logs")
 
 	if len(callLogs) != len(receiptsLogs) {
 		panic(fmt.Errorf(
@@ -936,8 +906,6 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 			len(callLogs),
 		))
 	}
-
-	firehoseDebug("for/loop")
 
 	for i := 0; i < len(callLogs); i++ {
 		callLog := callLogs[i]
@@ -957,8 +925,6 @@ func (f *Firehose) assignOrdinalAndIndexToReceiptLogs() {
 		receiptsLog.Index = callLog.Index
 		receiptsLog.Ordinal = callLog.Ordinal
 	}
-
-	firehoseDebug("after for/loop")
 }
 
 func (f *Firehose) noTopicsLogOnFailedCallSetToEmptyHash() {
