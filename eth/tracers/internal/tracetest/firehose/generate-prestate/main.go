@@ -26,6 +26,7 @@ var configByName = map[string]*params.ChainConfig{
 	"sepolia":          params.SepoliaChainConfig,
 	"holesky":          params.HoleskyChainConfig,
 	"unichain-mainnet": params.UnichainMainnetConfig,
+	"base-mainnet":     params.UnichainMainnetConfig,
 }
 
 func main() {

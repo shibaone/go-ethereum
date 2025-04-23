@@ -105,7 +105,7 @@ var (
 	}
 	// HoleskyChainConfig contains the chain parameters to run a node on the Holesky test network.
 	UnichainMainnetConfig = &ChainConfig{
-		ChainID:                 big.NewInt(130),
+		ChainID:                 big.NewInt(8453),
 		Optimism:                &OptimismConfig{EIP1559Elasticity: 50, EIP1559Denominator: 10},
 		HomesteadBlock:          big.NewInt(0),
 		DAOForkBlock:            nil,

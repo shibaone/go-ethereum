@@ -44,6 +44,7 @@ func TestFirehosePrestate(t *testing.T) {
 		//"./testdata/TestFirehosePrestate/deposit_nonce_check_base_after_canyon",
 		//"./testdata/TestFirehosePrestate/deposit_nonce_check_base_state_failed",
 		"./testdata/TestFirehosePrestate/deposit_nonce_check_early_block",
+		"./testdata/TestFirehosePrestate/base_failing",
 	}
 
 	for _, folder := range testFolders {
