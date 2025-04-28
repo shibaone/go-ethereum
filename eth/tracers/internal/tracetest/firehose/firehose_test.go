@@ -32,17 +32,17 @@ var tracingModels = []tracingModel{tracingModelFirehose3_0}
 
 func TestFirehosePrestate(t *testing.T) {
 	testFolders := []string{
-		//"./testdata/TestFirehosePrestate/keccak256_too_few_memory_bytes_get_padded",
-		//"./testdata/TestFirehosePrestate/keccak256_wrong_diff",
-		//"./testdata/TestFirehosePrestate/suicide_double_withdraw",
-		//"./testdata/TestFirehosePrestate/extra_account_creations",
-		//"./testdata/TestFirehosePrestate/deposit_nonce_check_base_state_failed",
-		//"./testdata/TestFirehosePrestate/failed_deposit",
-		//"./testdata/TestFirehosePrestate/deposit_nonce_check_optimism_before_canyon",
-		//"./testdata/TestFirehosePrestate/deposit_nonce_check_optimism_after_canyon",
-		//"./testdata/TestFirehosePrestate/deposit_nonce_check_base_before_canyon",
-		//"./testdata/TestFirehosePrestate/deposit_nonce_check_base_after_canyon",
-		//"./testdata/TestFirehosePrestate/deposit_nonce_check_base_state_failed",
+		"./testdata/TestFirehosePrestate/keccak256_too_few_memory_bytes_get_padded",
+		"./testdata/TestFirehosePrestate/keccak256_wrong_diff",
+		"./testdata/TestFirehosePrestate/suicide_double_withdraw",
+		"./testdata/TestFirehosePrestate/extra_account_creations",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check_base_state_failed",
+		"./testdata/TestFirehosePrestate/failed_deposit",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check_optimism_before_canyon",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check_optimism_after_canyon",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check_base_before_canyon",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check_base_after_canyon",
+		"./testdata/TestFirehosePrestate/deposit_nonce_check_base_state_failed",
 		"./testdata/TestFirehosePrestate/deposit_nonce_check_early_block",
 		"./testdata/TestFirehosePrestate/base_failing",
 	}

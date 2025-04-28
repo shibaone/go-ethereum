@@ -750,6 +750,10 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 
 	rootCall := f.transaction.Calls[0]
 
+	// Can be done prior moving last deferred call state to the root call as we are only interested from the initial
+	// deferred state that already been transferred into the root call (in `onCallStart(...)`).
+	f.discardUncommittedSetCodeAuthorization(rootCall)
+
 	if !f.deferredCallState.IsEmpty() {
 		if err := f.deferredCallState.MaybePopulateCallAndReset("root", rootCall); err != nil {
 			panic(err)
@@ -780,6 +784,13 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 	f.populateStateReverted()
 	f.removeLogBlockIndexOnStateRevertedCalls()
 	f.assignOrdinalAndIndexToReceiptLogs()
+
+	if *f.applyBackwardCompatibility {
+		// Known Firehose issue: Failed call logging a log with no topics were not fixed in the old Firehose instrumentation
+		// leading to them to be rendered as `topics: [""]` instead of `topics: nil` like successful calls.
+		// Here we re-apply this bogus behavior.
+		f.noTopicsLogOnFailedCallSetToEmptyHash()
+	}
 
 	if *f.applyBackwardCompatibility {
 		// Known Firehose issue: This field has never been populated in the old Firehose instrumentation
@@ -1054,8 +1065,6 @@ func (f *Firehose) invertWithdrawAndRefundBalanceChange(activeCall *pbeth.Call, 
 	withdrawChange := changes[withdrawIndex]
 	changes[withdrawIndex] = changes[refundIndex]
 	changes[refundIndex] = withdrawChange
-
-	return
 }
 
 func (f *Firehose) removeFirstWithdrawBalanceChange(activeCall *pbeth.Call, lastWithdrawIndex int) {
@@ -2840,7 +2849,7 @@ func ptr[T any](t T) *T {
 // 	// work because the memory is going to be expanded before the operation is actually
 // 	// executed so the memory will be of the correct size.
 // 	//
-// 	// In this situtation, we must pad with zeroes when the memory is not big enough.
+// 	// In this situation, we must pad with zeroes when the memory is not big enough.
 // 	reminder := m[offset:]
 // 	return append(reminder, make([]byte, int(size)-len(reminder))...)
 // }
