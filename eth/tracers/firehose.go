@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/uint256"
 	pbeth "github.com/streamingfast/firehose-ethereum/types/pb/sf/ethereum/type/v2"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
@@ -2828,28 +2829,28 @@ func ptr[T any](t T) *T {
 	return &t
 }
 
-// type Memory []byte
+type Memory []byte
 
-// func (m Memory) GetPtrUint256(offset, size *uint256.Int) []byte {
-// 	return m.GetPtr(int64(offset.Uint64()), int64(size.Uint64()))
-// }
+func (m Memory) GetPtrUint256(offset, size *uint256.Int) []byte {
+	return m.GetPtr(int64(offset.Uint64()), int64(size.Uint64()))
+}
 
-// func (m Memory) GetPtr(offset, size int64) []byte {
-// 	if size == 0 {
-// 		return nil
-// 	}
+func (m Memory) GetPtr(offset, size int64) []byte {
+	if size == 0 {
+		return nil
+	}
 
-// 	if len(m) >= (int(offset) + int(size)) {
-// 		return m[offset : offset+size]
-// 	}
+	if len(m) >= (int(offset) + int(size)) {
+		return m[offset : offset+size]
+	}
 
-// 	// The EVM does memory expansion **after** notifying us about OnOpcode which we use
-// 	// to compute Keccak256 pre-images now. This creates problem when we want to retrieve
-// 	// the preimage data because the memory is not expanded yet but in the EVM is going to
-// 	// work because the memory is going to be expanded before the operation is actually
-// 	// executed so the memory will be of the correct size.
-// 	//
-// 	// In this situation, we must pad with zeroes when the memory is not big enough.
-// 	reminder := m[offset:]
-// 	return append(reminder, make([]byte, int(size)-len(reminder))...)
-// }
+	// The EVM does memory expansion **after** notifying us about OnOpcode which we use
+	// to compute Keccak256 pre-images now. This creates problem when we want to retrieve
+	// the preimage data because the memory is not expanded yet but in the EVM is going to
+	// work because the memory is going to be expanded before the operation is actually
+	// executed so the memory will be of the correct size.
+	//
+	// In this situation, we must pad with zeroes when the memory is not big enough.
+	reminder := m[offset:]
+	return append(reminder, make([]byte, int(size)-len(reminder))...)
+}
