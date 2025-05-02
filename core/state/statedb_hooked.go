@@ -253,7 +253,13 @@ func (s *hookedStateDB) SelfDestruct6780(address common.Address) (uint256.Int, b
 
 	prev, changed := s.inner.SelfDestruct6780(address)
 
-	if s.hooks.OnBalanceChange != nil && changed && !prev.IsZero() {
+	// Firehose: We created Arbitrum Firehose tracer from a development version of Firehose 3.0
+	// that got merged in Geth. In the initial development version we used, the `prev.Sign() > 0`
+	// condition was not present.
+	//
+	// To keep deterministic behavior with existing Arbitrum Firehose traces, we comment out
+	// the condition.
+	if s.hooks.OnBalanceChange != nil && changed /* && !prev.IsZero() */ {
 		s.hooks.OnBalanceChange(address, prev.ToBig(), new(big.Int), tracing.BalanceDecreaseSelfdestruct)
 	}
 
