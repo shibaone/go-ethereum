@@ -13,24 +13,24 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	pbeth "github.com/ethereum/go-ethereum/pb/sf/ethereum/type/v2"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
+	pbeth "github.com/streamingfast/firehose-ethereum/types/pb/sf/ethereum/type/v2"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -262,7 +262,7 @@ func (f *Firehose) OnBlockchainInit(chainConfig *params.ChainConfig) {
 		// Quite unsure what we could do, might not be of importance actually (but would
 		// indeed be nice to have the version in the firehose logs, but it's not a blocker)
 		// arbitrumVcsVersion, _, _ := confighelpers.GetVersion()
-		f.printToFirehose("INIT", FirehoseProtocolVersion, "arbitrum", params.VersionWithMeta)
+		f.printToFirehose("INIT", FirehoseProtocolVersion, "arbitrum", version.WithMeta)
 	} else {
 		f.panicInvalidState("The OnBlockchainInit callback was called more than once", 0)
 	}
@@ -279,10 +279,10 @@ func (f *Firehose) OnBlockStart(event tracing.BlockEvent) {
 		finalizedHash = finalized.Hash().Bytes()
 	}
 
-	f.onBlockStart(event.Block, event.TD, finalizedNum, finalizedHash)
+	f.onBlockStart(event.Block, finalizedNum, finalizedHash)
 }
 
-func (f *Firehose) onBlockStart(b *types.Block, td *big.Int, finalizedNum uint64, finalizedHash []byte) {
+func (f *Firehose) onBlockStart(b *types.Block, finalizedNum uint64, finalizedHash []byte) {
 	// Hash is usually pre-computed within `event.Block`, so it's better to take from there
 	hash := b.Hash()
 	header := b.Header()
@@ -299,15 +299,14 @@ func (f *Firehose) onBlockStart(b *types.Block, td *big.Int, finalizedNum uint64
 	f.block = &pbeth.Block{
 		Hash:   b.Hash().Bytes(),
 		Number: b.Number().Uint64(),
-		Header: newBlockHeaderFromChainHeader(b.Header(), firehoseBigIntFromNative(new(big.Int).Add(td, b.Difficulty()))),
+		Header: newBlockHeaderFromChainHeader(b.Header()),
 		Size:   b.Size(),
 		// Known Firehose issue: If you fix all known Firehose issue for a new chain, don't forget to bump `Ver` to `4`!
 		Ver: 3,
 	}
 
 	for _, uncle := range b.Uncles() {
-		// TODO: check if td should be part of uncles
-		f.block.Uncles = append(f.block.Uncles, newBlockHeaderFromChainHeader(uncle, nil))
+		f.block.Uncles = append(f.block.Uncles, newBlockHeaderFromChainHeader(uncle))
 	}
 
 	if f.block.Header.BaseFeePerGas != nil {
@@ -339,7 +338,7 @@ func (f *Firehose) OnBlockUpdate(b *types.Block, td *big.Int) {
 	f.ensureInBlock(0)
 	f.block.Hash = b.Hash().Bytes()
 	f.block.Number = b.Number().Uint64()
-	f.block.Header = newBlockHeaderFromChainHeader(b.Header(), firehoseBigIntFromNative(new(big.Int).Add(td, b.Difficulty())))
+	f.block.Header = newBlockHeaderFromChainHeader(b.Header())
 	f.block.Size = b.Size()
 }
 
@@ -408,12 +407,7 @@ func (f *Firehose) OnTxStart(vm *tracing.VMContext, tx *types.Transaction, from 
 func (f *Firehose) onTxStart(tx *types.Transaction, hash common.Hash, from, to common.Address) {
 	v, r, s := tx.RawSignatureValues()
 
-	var blobGas *uint64
-	if tx.Type() == types.BlobTxType {
-		blobGas = ptr(tx.BlobGas())
-	}
-
-	f.transaction = &pbeth.TransactionTrace{
+	trx := &pbeth.TransactionTrace{
 		BeginOrdinal:         f.blockOrdinal.Next(),
 		Hash:                 hash.Bytes(),
 		From:                 from.Bytes(),
@@ -430,10 +424,19 @@ func (f *Firehose) onTxStart(tx *types.Transaction, hash common.Hash, from, to c
 		AccessList:           newAccessListFromChain(tx.AccessList()),
 		MaxFeePerGas:         maxFeePerGas(tx),
 		MaxPriorityFeePerGas: maxPriorityFeePerGas(tx),
-		BlobGas:              blobGas,
-		BlobGasFeeCap:        firehoseBigIntFromNative(tx.BlobGasFeeCap()),
-		BlobHashes:           newBlobHashesFromChain(tx.BlobHashes()),
 	}
+
+	switch tx.Type() {
+	case types.BlobTxType:
+		trx.BlobGas = ptr(tx.BlobGas())
+		trx.BlobGasFeeCap = firehoseBigIntFromNative(tx.BlobGasFeeCap())
+		trx.BlobHashes = newBlobHashesFromChain(tx.BlobHashes())
+
+	case types.SetCodeTxType:
+		trx.SetCodeAuthorizations = newSetCodeAuthorizationsFromChain(tx.SetCodeAuthorizations())
+	}
+
+	f.transaction = trx
 }
 
 func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
@@ -468,6 +471,10 @@ func (f *Firehose) completeTransaction(receipt *types.Receipt) *pbeth.Transactio
 	})
 
 	rootCall := f.transaction.Calls[0]
+
+	// Can be done prior moving last deferred call state to the root call as we are only interested from the initial
+	// deferred state that already been transferred into the root call (in `onCallStart(...)`).
+	f.discardUncommittedSetCodeAuthorization(rootCall)
 
 	if !f.deferredCallState.IsEmpty() {
 		f.deferredCallState.MaybePopulateCallAndReset("root", rootCall)
@@ -519,6 +526,39 @@ func (f *Firehose) populateStateReverted() {
 		}
 
 		call.StateReverted = (parent != nil && parent.StateReverted) || call.StatusFailed
+	}
+}
+
+// discardUncommittedSetCodeAuthorization set `discarded = true` for all the SetCodeAuthorization element
+// that don't have a corresponding NonceChange coming from the root call of the transaction, which
+// means they weren't committed to the state.
+//
+// Indeed, EIP-7702 states that are invalid SetCodeAuthorization is simply discard and it's not recorded
+// to chain's state.
+func (f *Firehose) discardUncommittedSetCodeAuthorization(rootCall *pbeth.Call) {
+	usedNonceChange := map[int]bool{}
+	findNonceChange := func(forAddress []byte, nonce uint64) *pbeth.NonceChange {
+		for i, change := range rootCall.NonceChanges {
+			if change.OldValue == nonce && change.NewValue == nonce+1 && bytes.Equal(change.Address, forAddress) && usedNonceChange[i] == false {
+				usedNonceChange[i] = true
+				return change
+			}
+		}
+
+		return nil
+	}
+
+	for _, auth := range f.transaction.SetCodeAuthorizations {
+		if len(auth.Authority) == 0 {
+			// Nothing to check, authority is empty, it's not a valid authorization
+			auth.Discarded = true
+			continue
+		}
+
+		if findNonceChange(auth.Authority, auth.Nonce) == nil {
+			firehoseDebug("discarded set code authorization, no corresponding nonce change found (address=%s nonce=%d)", hex.EncodeToString(auth.Authority), auth.Nonce)
+			auth.Discarded = true
+		}
 	}
 }
 
@@ -727,8 +767,6 @@ func (f *Firehose) invertWithdrawAndRefundBalanceChange(activeCall *pbeth.Call, 
 	withdrawChange := changes[withdrawIndex]
 	changes[withdrawIndex] = changes[refundIndex]
 	changes[refundIndex] = withdrawChange
-
-	return
 }
 
 func (f *Firehose) removeFirstWithdrawBalanceChange(activeCall *pbeth.Call, lastWithdrawIndex int) {
@@ -1047,7 +1085,7 @@ func (f *Firehose) OnGenesisBlock(b *types.Block, alloc types.GenesisAlloc) {
 
 	f.ensureBlockChainInit()
 
-	f.onBlockStart(b, big.NewInt(0), 0, nil)
+	f.onBlockStart(b, 0, nil)
 	f.onTxStart(types.NewTx(&types.LegacyTx{}), emptyCommonHash, emptyCommonAddress, emptyCommonAddress)
 	f.OnCallEnter(0, byte(vm.CALL), emptyCommonAddress, emptyCommonAddress, nil, 0, nil)
 
@@ -1473,7 +1511,7 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 
 	f.outputBuffer.Reset()
 
-	previousNum, previousHash := block.PreviousNum(), block.PreviousID()
+	previousNum, previousHash := block.GetFirehoseBlockParentNumber(), block.PreviousID()
 	libNum := finalityStatus.NormalizeLastIrreversibleBlockNum(block.Number)
 
 	// **Important* The final space in the Sprintf template is mandatory!
@@ -1483,7 +1521,7 @@ func (f *Firehose) printBlockToFirehose(block *pbeth.Block, finalityStatus *Fina
 		previousNum,
 		previousHash,
 		libNum,
-		block.Time().UnixNano(),
+		block.GetFirehoseBlockTime().UnixNano(),
 	))
 
 	encoder := base64.NewEncoder(base64.StdEncoding, f.outputBuffer)
@@ -1569,7 +1607,7 @@ func (f *Firehose) flushToFirehose(in []byte) {
 }
 
 // FIXME: Create a unit test that is going to fail as soon as any header is added in
-func newBlockHeaderFromChainHeader(h *types.Header, td *pbeth.BigInt) *pbeth.BlockHeader {
+func newBlockHeaderFromChainHeader(h *types.Header) *pbeth.BlockHeader {
 	var withdrawalsHashBytes []byte
 	if hash := h.WithdrawalsHash; hash != nil {
 		withdrawalsHashBytes = hash.Bytes()
@@ -1596,7 +1634,6 @@ func newBlockHeaderFromChainHeader(h *types.Header, td *pbeth.BigInt) *pbeth.Blo
 		ReceiptRoot:      h.ReceiptHash.Bytes(),
 		LogsBloom:        h.Bloom.Bytes(),
 		Difficulty:       firehoseBigIntFromNative(h.Difficulty),
-		TotalDifficulty:  td,
 		GasLimit:         h.GasLimit,
 		GasUsed:          h.GasUsed,
 		Timestamp:        timestamppb.New(time.Unix(int64(h.Time), 0)),
@@ -1609,6 +1646,9 @@ func newBlockHeaderFromChainHeader(h *types.Header, td *pbeth.BigInt) *pbeth.Blo
 		ExcessBlobGas:    h.ExcessBlobGas,
 		ParentBeaconRoot: parentBeaconRootBytes,
 		RequestsHash:     requestHashBytes,
+
+		// Not supported anymore across Ethereum forks
+		TotalDifficulty: nil,
 
 		// Only set on Polygon fork(s)
 		TxDependency: nil,
@@ -1632,6 +1672,8 @@ func transactionTypeFromChainTxType(txType uint8) pbeth.TransactionTrace_Type {
 		return pbeth.TransactionTrace_TRX_TYPE_LEGACY
 	case types.BlobTxType:
 		return pbeth.TransactionTrace_TRX_TYPE_BLOB
+	case types.SetCodeTxType:
+		return pbeth.TransactionTrace_TRX_TYPE_SET_CODE
 	case types.ArbitrumDepositTxType:
 		return pbeth.TransactionTrace_TRX_TYPE_ARBITRUM_DEPOSIT
 	case types.ArbitrumUnsignedTxType:
@@ -1782,6 +1824,37 @@ var balanceChangeReasonToPb = map[tracing.BalanceChangeReason]pbeth.BalanceChang
 	tracing.BalanceChangeUnspecified: pbeth.BalanceChange_REASON_UNKNOWN,
 }
 
+func newSetCodeAuthorizationsFromChain(authorizations []types.SetCodeAuthorization) (out []*pbeth.SetCodeAuthorization) {
+	if len(authorizations) == 0 {
+		return nil
+	}
+
+	out = make([]*pbeth.SetCodeAuthorization, len(authorizations))
+	for i, authorization := range authorizations {
+		pbAuthorization := &pbeth.SetCodeAuthorization{
+			ChainId: authorization.ChainID.Bytes(),
+			Nonce:   authorization.Nonce,
+			V:       uint32(authorization.V),
+			R:       normalizeSignaturePoint(authorization.R.Bytes()),
+			S:       normalizeSignaturePoint(authorization.S.Bytes()),
+		}
+
+		authority, err := authorization.Authority()
+		if err != nil {
+			// The node skips invalid authorizations, we do the same, at transaction's end, we will
+			// also remove authorizations that didn't result into a code change.
+			firehoseDebug("failed to compute authority for authorization at index %d (err=%s)", i, errorView(err))
+			pbAuthorization.Discarded = true
+		} else {
+			pbAuthorization.Authority = authority.Bytes()
+		}
+
+		out[i] = pbAuthorization
+	}
+
+	return
+}
+
 func balanceChangeReasonFromChain(reason tracing.BalanceChangeReason) pbeth.BalanceChange_Reason {
 	if r, ok := balanceChangeReasonToPb[reason]; ok {
 		return r
@@ -1838,7 +1911,7 @@ func maxFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 	case types.LegacyTxType, types.AccessListTxType, types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
 		return nil
 
-	case types.DynamicFeeTxType, types.BlobTxType:
+	case types.DynamicFeeTxType, types.BlobTxType, types.SetCodeTxType:
 		return firehoseBigIntFromNative(tx.GasFeeCap())
 
 	}
@@ -1851,7 +1924,7 @@ func maxPriorityFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 	case types.LegacyTxType, types.AccessListTxType, types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
 		return nil
 
-	case types.DynamicFeeTxType, types.BlobTxType:
+	case types.DynamicFeeTxType, types.BlobTxType, types.SetCodeTxType:
 		return firehoseBigIntFromNative(tx.GasTipCap())
 	}
 
@@ -1863,15 +1936,22 @@ func gasPrice(tx *types.Transaction, baseFee *big.Int) *pbeth.BigInt {
 	case types.LegacyTxType, types.AccessListTxType, types.ArbitrumDepositTxType, types.ArbitrumUnsignedTxType, types.ArbitrumContractTxType, types.ArbitrumRetryTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType, types.ArbitrumLegacyTxType:
 		return firehoseBigIntFromNative(tx.GasPrice())
 
-	case types.DynamicFeeTxType, types.BlobTxType:
+	case types.DynamicFeeTxType, types.BlobTxType, types.SetCodeTxType:
 		if baseFee == nil {
 			return firehoseBigIntFromNative(tx.GasPrice())
 		}
 
-		return firehoseBigIntFromNative(math.BigMin(new(big.Int).Add(tx.GasTipCap(), baseFee), tx.GasFeeCap()))
+		return firehoseBigIntFromNative(bigMin(new(big.Int).Add(tx.GasTipCap(), baseFee), tx.GasFeeCap()))
 	}
 
 	panic(errUnhandledTransactionType("gasPrice", tx.Type()))
+}
+
+func bigMin(x, y *big.Int) *big.Int {
+	if x.Cmp(y) > 0 {
+		return y
+	}
+	return x
 }
 
 func FirehoseDebug(msg string, args ...interface{}) {
@@ -2198,6 +2278,7 @@ func staticFirehoseChainValidationOnInit() {
 		types.AccessListTxType: true,
 		types.DynamicFeeTxType: true,
 		types.BlobTxType:       true,
+		types.SetCodeTxType:    true,
 		// these generate an error when trying to EncodeRLP
 		//types.ArbitrumDepositTxType:         true,
 		//types.ArbitrumUnsignedTxType:        true,
