@@ -50,6 +50,10 @@ func NewHookedState(stateDb *StateDB, hooks *tracing.Hooks) *hookedStateDB {
 	return s
 }
 
+func (s *hookedStateDB) GetInner() any {
+	return s.inner
+}
+
 func (s *hookedStateDB) CreateAccount(addr common.Address) {
 	s.inner.CreateAccount(addr)
 }

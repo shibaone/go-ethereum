@@ -1140,6 +1140,11 @@ func (f *Firehose) OnBalanceChange(a common.Address, prev, new *big.Int, reason 
 		return
 	}
 
+	if reason >= 128 {
+		firehoseDebug("ignoring Arbitrum specific balance change reason %d that we do not track yet", reason)
+		return
+	}
+
 	// Known Firehose issue: It's possible to burn Ether by sending some ether to a suicided account. In those case,
 	// at the end of block producing, StateDB finalize the block by burning ether from the account. This is something
 	// we were not tracking in the old Firehose instrumentation.
@@ -1889,6 +1894,12 @@ var gasChangeReasonToPb = map[tracing.GasChangeReason]pbeth.GasChange_Reason{
 	tracing.GasChangeCallStorageColdAccess:   pbeth.GasChange_REASON_STATE_COLD_ACCESS,
 	tracing.GasChangeCallLeftOverRefunded:    pbeth.GasChange_REASON_REFUND_AFTER_EXECUTION,
 	tracing.GasChangeCallFailedExecution:     pbeth.GasChange_REASON_FAILED_EXECUTION,
+
+	tracing.GasChangeWitnessContractInit:           pbeth.GasChange_REASON_WITNESS_CONTRACT_INIT,
+	tracing.GasChangeWitnessContractCreation:       pbeth.GasChange_REASON_WITNESS_CONTRACT_CREATION,
+	tracing.GasChangeWitnessCodeChunk:              pbeth.GasChange_REASON_WITNESS_CODE_CHUNK,
+	tracing.GasChangeWitnessContractCollisionCheck: pbeth.GasChange_REASON_WITNESS_CONTRACT_COLLISION_CHECK,
+	tracing.GasChangeTxDataFloor:                   pbeth.GasChange_REASON_TX_DATA_FLOOR,
 
 	// Ignored, we track them manually, newGasChange ensure that we panic if we see Unknown
 	tracing.GasChangeCallOpCode: pbeth.GasChange_REASON_UNKNOWN,

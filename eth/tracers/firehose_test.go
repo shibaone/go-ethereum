@@ -3,9 +3,11 @@ package tracers
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"os"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -180,6 +182,70 @@ func Test_FirehoseAndGethHeaderFieldMatches(t *testing.T) {
 		}
 
 		assert.Contains(t, gethFieldNames, pbFieldRenamedName, "pbField.Name=%q (original %q) not found in gethFieldNames", pbFieldRenamedName, pbFieldName)
+	}
+}
+
+var endsWithUnknownConstant = regexp.MustCompile(`.*\(\d+\)$`)
+
+func TestFirehose_BalanceChangeAllMappedCorrectly(t *testing.T) {
+	for i := 0; i <= math.MaxUint8; i++ {
+		tracingReason := tracing.BalanceChangeReason(i)
+		if tracingReason == tracing.BalanceChangeUnspecified || tracingReason == tracing.BalanceChangeRevert {
+			// Should never happen in Firehose tracer, only if tracer is wrapped with [tracing.WrapWithJournal]
+			continue
+		}
+
+		// Here, we leverage the fact that the `tracing.BalanceChangeReason` Stringer will render the String
+		// as `<EnumName>(<indexValue>)` if the index is not mapped to a constant in the enum. If this happens,
+		// we know it's not a defined constant in the Geth tracing package.
+		//
+		// Otherwise, it's defined and we should have some mapping for it in the `balanceChangeReasonFromChain` function.
+		//
+		// There is a loophole of this technique and it's that if the code generator defining the enum Stringer is
+		// not run, we will think it's an undefined constant and will miss it.
+		if !endsWithUnknownConstant.MatchString(tracingReason.String()) {
+			require.NotPanics(t, func() {
+				balanceChangeReasonFromChain(tracingReason)
+			}, "BalanceChangeReason panicked for value %v", tracingReason)
+		}
+	}
+
+	// Arbitrum specific balance changes that we do not map yet
+}
+
+func TestFirehose_GasChangeAllMappedCorrectly(t *testing.T) {
+	for i := 0; i <= math.MaxUint8; i++ {
+		tracingReason := tracing.GasChangeReason(i)
+
+		switch tracingReason {
+		case tracing.GasChangeUnspecified,
+			tracing.GasChangeCallOpCode,
+			tracing.GasChangeIgnored:
+			// Those are ignored and never mapped
+			continue
+
+		case tracing.GasChangeTxInitialBalance,
+			tracing.GasChangeTxRefunds,
+			tracing.GasChangeTxLeftOverReturned,
+			tracing.GasChangeCallInitialBalance,
+			tracing.GasChangeCallLeftOverReturned:
+			// Those are new gas change reasons that are not mapped yet since we are in Firehose 2.3 block model on Arbitrum
+			continue
+		}
+
+		// Here, we leverage the fact that the `tracing.GasChangeReason` Stringer will render the String
+		// as `<EnumName>(<indexValue>)` if the index is not mapped to a constant in the enum. If this happens,
+		// we know it's not a defined constant in the Geth tracing package.
+		//
+		// Otherwise, it's defined and we should have some mapping for it in the `gasChangeReasonFromChain` function.
+		//
+		// There is a loophole of this technique and it's that if the code generator defining the enum Stringer is
+		// not run, we will think it's an undefined constant and will miss it.
+		if !endsWithUnknownConstant.MatchString(tracingReason.String()) {
+			require.NotPanics(t, func() {
+				gasChangeReasonFromChain(tracingReason)
+			}, "GasChangeReason panicked for value %v", tracingReason)
+		}
 	}
 }
 

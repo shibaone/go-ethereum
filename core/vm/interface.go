@@ -139,4 +139,14 @@ type StateDB interface {
 	IntermediateRoot(bool) common.Hash
 
 	Reader() state.Reader
+
+	// GetInner is used in Firehose only temporarily to get our hand into a non-hooked
+	// StateDB that is required to avoid tracing some part for which we had some issue.
+	//
+	// If the StateDB is a HookedStateDB, then this will return the inner state db, otherwise
+	// it will return itself directly.
+	//
+	// We need to return any to avoid circular dependency with the vm.StateDB interface
+	// and the state package.
+	GetInner() any
 }
