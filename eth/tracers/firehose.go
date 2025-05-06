@@ -154,13 +154,14 @@ type Firehose struct {
 	blockFinality          *FinalityStatus
 	blockRules             params.Rules
 	blockIsPrecompiledAddr func(addr common.Address) bool
+	blockIsGenesis         bool
 
 	// Transaction state
+	evm                      *tracing.VMContext
 	transaction              *pbeth.TransactionTrace
 	transactionStateSnapshot *TransactionStateSnapshot
-
-	transactionLogIndex uint32
-	inSystemCall        bool
+	transactionLogIndex      uint32
+	inSystemCall             bool
 
 	// Call state
 	callStack               *CallStack
@@ -239,12 +240,14 @@ func (f *Firehose) resetBlock() {
 	f.blockFinality.Reset()
 	f.blockIsPrecompiledAddr = nil
 	f.blockRules = params.Rules{}
+	f.blockIsGenesis = false
 }
 
 // resetTransaction resets the transaction state and the call state in one shot
 func (f *Firehose) resetTransaction() {
 	firehoseDebug("resetting transaction state")
 
+	f.evm = nil
 	f.transaction = nil
 	f.transactionLogIndex = 0
 	f.inSystemCall = false
@@ -262,6 +265,7 @@ func (f *Firehose) snapshotAndResetTransactionState() {
 	firehoseDebug("snapshotting transaction state")
 
 	f.transactionStateSnapshot = &TransactionStateSnapshot{
+		evm:                     f.evm,
 		transaction:             f.transaction,
 		transactionLogIndex:     f.transactionLogIndex,
 		callStack:               f.callStack.Copy(),
@@ -284,6 +288,7 @@ func (f *Firehose) restoreTransactionState() {
 	f.resetTransaction()
 
 	if f.transactionStateSnapshot != nil {
+		f.evm = f.transactionStateSnapshot.evm
 		f.transaction = f.transactionStateSnapshot.transaction
 		f.transactionLogIndex = f.transactionStateSnapshot.transactionLogIndex
 		f.callStack = f.transactionStateSnapshot.callStack
@@ -439,6 +444,7 @@ func (f *Firehose) OnTxStart(vm *tracing.VMContext, tx *types.Transaction, from 
 
 	f.ensureInBlockAndNotInTrxAndNotInCall()
 
+	f.evm = vm
 	var to common.Address
 	if tx.To() == nil {
 		to = crypto.CreateAddress(from, vm.StateDB.GetNonce(from))
@@ -970,6 +976,18 @@ func (f *Firehose) callStart(source string, callType pbeth.CallType, from common
 		GasLimit: gas,
 	}
 
+	if f.blockRules.IsPrague && !f.inSystemCall && !f.blockIsGenesis && callType != pbeth.CallType_CREATE {
+		firehoseTrace("call resolving delegation (from=%s)", from)
+
+		code := f.evm.StateDB.GetCode(to)
+		if len(code) != 0 {
+			if target, ok := types.ParseDelegation(code); ok {
+				firehoseDebug("call resolved delegation (from=%s, delegates_to=%s)", from, target)
+				call.AddressDelegatesTo = target.Bytes()
+			}
+		}
+	}
+
 	// Known Firehose issue: The BeginOrdinal of the genesis block root call is never actually
 	// incremented and it's always 0.
 	//
@@ -1139,6 +1157,9 @@ func (f *Firehose) OnGenesisBlock(b *types.Block, alloc types.GenesisAlloc) {
 
 	f.ensureBlockChainInit()
 
+	// Going to be reset in OnBlockEnd (via the call to `resetBlock` within it)
+	f.blockIsGenesis = true
+
 	f.onBlockStart(b, 0, nil)
 	f.onTxStart(types.NewTx(&types.LegacyTx{}), emptyCommonHash, emptyCommonAddress, emptyCommonAddress)
 	f.OnCallEnter(0, byte(vm.CALL), emptyCommonAddress, emptyCommonAddress, nil, 0, nil)
@@ -1276,8 +1297,14 @@ func (f *Firehose) OnCodeChange(a common.Address, prevCodeHash common.Hash, prev
 
 	if f.transaction != nil {
 		activeCall := f.callStack.Peek()
+
+		// Since EIP-7702 and the introduction of the `SetCode` transaction, a traced `StateDB.SetCode(...)` call
+		// is now happening within the "bootstrap" transaction phase which happens before any call is made. So
+		// in the event there is no active call, we push the code change to the deferred state and will be applied
+		// on the root call when it's finally created.
 		if activeCall == nil {
-			f.panicInvalidState("caller expected to be in call state but we were not, this is a bug", 0)
+			f.deferredCallState.codeChanges = append(f.deferredCallState.codeChanges, f.newCodeChange(a, prevCodeHash, prev, codeHash, code))
+			return
 		}
 
 		// Geth 1.14.12 introduced a new behavior where a code change is emitted when a contract
@@ -1299,23 +1326,20 @@ func (f *Firehose) OnCodeChange(a common.Address, prevCodeHash common.Hash, prev
 			return
 		}
 
-		activeCall.CodeChanges = append(activeCall.CodeChanges, &pbeth.CodeChange{
-			Address: a.Bytes(),
-			OldHash: prevCodeHash.Bytes(),
-			OldCode: prev,
-			NewHash: codeHash.Bytes(),
-			NewCode: code,
-			Ordinal: f.blockOrdinal.Next(),
-		})
+		activeCall.CodeChanges = append(activeCall.CodeChanges, f.newCodeChange(a, prevCodeHash, prev, codeHash, code))
 	} else {
-		f.block.CodeChanges = append(f.block.CodeChanges, &pbeth.CodeChange{
-			Address: a.Bytes(),
-			OldHash: prevCodeHash.Bytes(),
-			OldCode: prev,
-			NewHash: codeHash.Bytes(),
-			NewCode: code,
-			Ordinal: f.blockOrdinal.Next(),
-		})
+		f.block.CodeChanges = append(f.block.CodeChanges, f.newCodeChange(a, prevCodeHash, prev, codeHash, code))
+	}
+}
+
+func (f *Firehose) newCodeChange(addr common.Address, prevCodeHash common.Hash, prev []byte, codeHash common.Hash, code []byte) *pbeth.CodeChange {
+	return &pbeth.CodeChange{
+		Address: addr.Bytes(),
+		OldHash: prevCodeHash.Bytes(),
+		OldCode: prev,
+		NewHash: codeHash.Bytes(),
+		NewCode: code,
+		Ordinal: f.blockOrdinal.Next(),
 	}
 }
 
@@ -1663,6 +1687,14 @@ func (f *Firehose) flushToFirehose(in []byte) {
 	errstr := fmt.Sprintf("\nFIREHOSE FAILED WRITING %dx: %s\n", loops, err)
 	os.WriteFile("/tmp/firehose_writer_failed_print.log", []byte(errstr), 0644)
 	fmt.Fprint(writer, errstr)
+}
+
+// TestingBuffer is an internal method only used for testing purposes
+// that should never be used in production code.
+//
+// There is no public api guaranteed for this method.
+func (f *Firehose) InternalTestingBuffer() *bytes.Buffer {
+	return f.testingBuffer
 }
 
 // FIXME: Create a unit test that is going to fail as soon as any header is added in
@@ -2165,6 +2197,7 @@ func (s *CallStack) Copy() *CallStack {
 // portion of the call/created.
 type DeferredCallState struct {
 	balanceChanges   []*pbeth.BalanceChange
+	codeChanges      []*pbeth.CodeChange
 	gasChanges       []*pbeth.GasChange
 	nonceChanges     []*pbeth.NonceChange
 	storageChanges   []*pbeth.StorageChange
@@ -2188,6 +2221,7 @@ func (d *DeferredCallState) MaybePopulateCallAndReset(source string, call *pbeth
 	// We must happen because it's populated at beginning of the call as well as at the very end
 	call.AccountCreations = append(call.AccountCreations, d.accountCreations...)
 	call.BalanceChanges = append(call.BalanceChanges, d.balanceChanges...)
+	call.CodeChanges = append(call.CodeChanges, d.codeChanges...)
 	call.GasChanges = append(call.GasChanges, d.gasChanges...)
 	call.StorageChanges = append(call.StorageChanges, d.storageChanges...)
 	call.Logs = append(call.Logs, d.logs...)
@@ -2205,12 +2239,13 @@ func (d *DeferredCallState) MaybePopulateCallAndReset(source string, call *pbeth
 
 func (d *DeferredCallState) IsEmpty() bool {
 	return len(d.balanceChanges) == 0 && len(d.gasChanges) == 0 && len(d.nonceChanges) == 0 && len(d.storageChanges) == 0 && len(
-		d.logs) == 0
+		d.logs) == 0 && len(d.codeChanges) == 0
 }
 
 func (d *DeferredCallState) Reset() {
 	d.accountCreations = nil
 	d.balanceChanges = nil
+	d.codeChanges = nil
 	d.gasChanges = nil
 	d.storageChanges = nil
 	d.logs = nil
@@ -2221,6 +2256,7 @@ func (d *DeferredCallState) Copy() *DeferredCallState {
 	return &DeferredCallState{
 		accountCreations: slices.Clone(d.accountCreations),
 		balanceChanges:   slices.Clone(d.balanceChanges),
+		codeChanges:      slices.Clone(d.codeChanges),
 		gasChanges:       slices.Clone(d.gasChanges),
 		storageChanges:   slices.Clone(d.storageChanges),
 		logs:             slices.Clone(d.logs),
@@ -2603,9 +2639,14 @@ func (m Memory) GetPtr(offset, size int64) []byte {
 }
 
 type TransactionStateSnapshot struct {
+	evm                     *tracing.VMContext
 	transaction             *pbeth.TransactionTrace
 	transactionLogIndex     uint32
-	callStack               *CallStack
-	deferredCallState       *DeferredCallState
 	latestCallEnterSuicided bool
+
+	// Those two are trickier as the actual instance is kept but reset,
+	// so a full, but shallow clone is made for those to ensure with
+	// can restore them later on.
+	callStack         *CallStack
+	deferredCallState *DeferredCallState
 }
