@@ -156,7 +156,8 @@ type Firehose struct {
 	blockIsPrecompiledAddr func(addr common.Address) bool
 
 	// Transaction state
-	transaction *pbeth.TransactionTrace
+	transaction       *pbeth.TransactionTrace
+	transactionBackup *pbeth.TransactionTrace
 
 	transactionLogIndex uint32
 	inSystemCall        bool
@@ -245,6 +246,7 @@ func (f *Firehose) resetTransaction() {
 	firehoseDebug("resetting transaction state")
 
 	f.transaction = nil
+	f.transactionBackup = nil
 	f.transactionLogIndex = 0
 	f.inSystemCall = false
 
@@ -361,7 +363,16 @@ func (f *Firehose) OnBlockEnd(err error) {
 
 func (f *Firehose) OnSystemCallStart() {
 	firehoseInfo("system call start")
-	f.ensureInBlockAndNotInTrx()
+
+	f.ensureInBlock(1)
+
+	// It appears that Arbitrum has a case where a system call is started
+	// while already within a transaction. So here, if we are already in a transaction,
+	// we backup the transaction and reset it to start a new one which will be
+	// reset later on in `OnSystemCallEnd`.
+	if f.transaction != nil {
+		f.transactionBackup = f.transaction
+	}
 
 	f.inSystemCall = true
 	f.transaction = &pbeth.TransactionTrace{}
@@ -375,8 +386,14 @@ func (f *Firehose) OnSystemCallEnd() {
 
 	f.block.SystemCalls = append(f.block.SystemCalls, f.transaction.Calls...)
 
+	// Keep the backup transaction before resetting everything
+	backup := f.transactionBackup
+
 	f.resetTransaction()
 	firehoseInfo("system call end")
+
+	// Restore the backup transaction after resetting everything
+	f.transaction = backup
 }
 
 func (f *Firehose) OnTxStart(vm *tracing.VMContext, tx *types.Transaction, from common.Address) {
