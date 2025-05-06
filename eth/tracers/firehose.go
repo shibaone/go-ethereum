@@ -156,8 +156,8 @@ type Firehose struct {
 	blockIsPrecompiledAddr func(addr common.Address) bool
 
 	// Transaction state
-	transaction       *pbeth.TransactionTrace
-	transactionBackup *pbeth.TransactionTrace
+	transaction              *pbeth.TransactionTrace
+	transactionStateSnapshot *TransactionStateSnapshot
 
 	transactionLogIndex uint32
 	inSystemCall        bool
@@ -246,13 +246,52 @@ func (f *Firehose) resetTransaction() {
 	firehoseDebug("resetting transaction state")
 
 	f.transaction = nil
-	f.transactionBackup = nil
 	f.transactionLogIndex = 0
 	f.inSystemCall = false
 
 	f.callStack.Reset()
 	f.latestCallEnterSuicided = false
 	f.deferredCallState.Reset()
+}
+
+// snapshotAndResetTransactionState is used to snapshot the current transaction state
+// to a "side" temporary storage and then reset the transaction state.
+//
+// It can be later restored using `restoreTransactionState`.
+func (f *Firehose) snapshotAndResetTransactionState() {
+	firehoseDebug("snapshotting transaction state")
+
+	f.transactionStateSnapshot = &TransactionStateSnapshot{
+		transaction:             f.transaction,
+		transactionLogIndex:     f.transactionLogIndex,
+		callStack:               f.callStack.Copy(),
+		deferredCallState:       f.deferredCallState.Copy(),
+		latestCallEnterSuicided: f.latestCallEnterSuicided,
+	}
+
+	f.resetTransaction()
+}
+
+// restoreTransactionState is used to restore the transaction state
+// from the "side" temporary storage created by `snapshotTransactionState`.
+// It will reset the transaction state before restoring it.
+//
+// Once the transaction state is restored, the `transactionStateSnapshot`
+// will be set to nil.
+func (f *Firehose) restoreTransactionState() {
+	firehoseDebug("restoring transaction state")
+
+	f.resetTransaction()
+
+	if f.transactionStateSnapshot != nil {
+		f.transaction = f.transactionStateSnapshot.transaction
+		f.transactionLogIndex = f.transactionStateSnapshot.transactionLogIndex
+		f.callStack = f.transactionStateSnapshot.callStack
+		f.deferredCallState = f.transactionStateSnapshot.deferredCallState
+		f.latestCallEnterSuicided = f.transactionStateSnapshot.latestCallEnterSuicided
+
+		f.transactionStateSnapshot = nil
+	}
 }
 
 // FIXME (matt): Is OnBlockchainInit called correctly from Nitro side?
@@ -371,7 +410,7 @@ func (f *Firehose) OnSystemCallStart() {
 	// we backup the transaction and reset it to start a new one which will be
 	// reset later on in `OnSystemCallEnd`.
 	if f.transaction != nil {
-		f.transactionBackup = f.transaction
+		f.snapshotAndResetTransactionState()
 	}
 
 	f.inSystemCall = true
@@ -386,14 +425,13 @@ func (f *Firehose) OnSystemCallEnd() {
 
 	f.block.SystemCalls = append(f.block.SystemCalls, f.transaction.Calls...)
 
-	// Keep the backup transaction before resetting everything
-	backup := f.transactionBackup
+	if f.transactionStateSnapshot != nil {
+		f.restoreTransactionState()
+	} else {
+		f.resetTransaction()
+	}
 
-	f.resetTransaction()
 	firehoseInfo("system call end")
-
-	// Restore the backup transaction after resetting everything
-	f.transaction = backup
 }
 
 func (f *Firehose) OnTxStart(vm *tracing.VMContext, tx *types.Transaction, from common.Address) {
@@ -463,7 +501,6 @@ func (f *Firehose) OnTxEnd(receipt *types.Receipt, err error) {
 
 	if receipt != nil {
 		switch receipt.Type {
-		// FIXME (matt): Ensure that ArbitrumDepositTxType, ArbitrumSubmitRetryableTxType and ArbitrumInternalTxType all traced as before
 		case types.ArbitrumDepositTxType, types.ArbitrumSubmitRetryableTxType, types.ArbitrumInternalTxType:
 			firehoseDebug("closing simulated root call to arbitrum (tx_type=%d)", receipt.Type)
 			f.callEnd("root", nil, receipt.GasUsed, err, err != nil)
@@ -2115,6 +2152,14 @@ func (s *CallStack) Peek() *pbeth.Call {
 	return s.stack[len(s.stack)-1]
 }
 
+func (s *CallStack) Copy() *CallStack {
+	return &CallStack{
+		index: s.index,
+		stack: slices.Clone(s.stack),
+		depth: s.depth,
+	}
+}
+
 // DeferredCallState is a helper struct that can be used to accumulate call's state
 // that is recorded before the Call has been started. This happens on the "starting"
 // portion of the call/created.
@@ -2169,8 +2214,18 @@ func (d *DeferredCallState) Reset() {
 	d.gasChanges = nil
 	d.storageChanges = nil
 	d.logs = nil
-	d.accountCreations = nil
 	d.nonceChanges = nil
+}
+
+func (d *DeferredCallState) Copy() *DeferredCallState {
+	return &DeferredCallState{
+		accountCreations: slices.Clone(d.accountCreations),
+		balanceChanges:   slices.Clone(d.balanceChanges),
+		gasChanges:       slices.Clone(d.gasChanges),
+		storageChanges:   slices.Clone(d.storageChanges),
+		logs:             slices.Clone(d.logs),
+		nonceChanges:     slices.Clone(d.nonceChanges),
+	}
 }
 
 func errorView(err error) _errorView {
@@ -2545,4 +2600,12 @@ func (m Memory) GetPtr(offset, size int64) []byte {
 	// In this situtation, we must pad with zeroes when the memory is not big enough.
 	reminder := m[offset:]
 	return append(reminder, make([]byte, int(size)-len(reminder))...)
+}
+
+type TransactionStateSnapshot struct {
+	transaction             *pbeth.TransactionTrace
+	transactionLogIndex     uint32
+	callStack               *CallStack
+	deferredCallState       *DeferredCallState
+	latestCallEnterSuicided bool
 }
