@@ -1216,8 +1216,8 @@ func (f *Firehose) OnBalanceChange(a common.Address, prev, new *big.Int, reason 
 	}
 
 	if reason >= 128 {
-		firehoseDebug("ignoring Arbitrum specific balance change reason %d that we do not track yet", reason)
-		return
+		firehoseTrace("balance change reason changed", reason, "block", f.block.Number, "trx_hash", hex.EncodeToString(f.transaction.Hash), a.Hex(), prev.Int64(), new.Int64())
+		reason = tracing.BalanceChangeTransfer
 	}
 
 	// Known Firehose issue: It's possible to burn Ether by sending some ether to a suicided account. In those case,
