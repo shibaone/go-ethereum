@@ -1,4 +1,43 @@
 # Changelog
+## v1.5.13
+### FEATURE
+[\#3019](https://github.com/bnb-chain/bsc/pull/3019) BEP-524: Short Block Interval Phase Two: 0.75 seconds
+[\#3044](https://github.com/bnb-chain/bsc/pull/3044) params: double FullImmutabilityThreshold for BEP-520 & BEP-524
+[\#3045](https://github.com/bnb-chain/bsc/pull/3045) Feature: StakeHub Contract Interface Implementation
+[\#3040](https://github.com/bnb-chain/bsc/pull/3040) bsc: add new block fetching mechanism
+[\#3043](https://github.com/bnb-chain/bsc/pull/3043) p2p: support new msg broadcast features
+[\#3070](https://github.com/bnb-chain/bsc/pull/3070) chore: renaming for evn and some optmization
+[\#3073](https://github.com/bnb-chain/bsc/pull/3073) evn: add support for node id removal
+[\#3072](https://github.com/bnb-chain/bsc/pull/3072) config: support more evn configuration in tool
+[\#3075](https://github.com/bnb-chain/bsc/pull/3075) config: apply two default miner option
+[\#3083](https://github.com/bnb-chain/bsc/pull/3083) evn: improve node ID management with better error handling
+[\#3084](https://github.com/bnb-chain/bsc/pull/3084) metrics: add more monitor metrics for EVN
+[\#3087](https://github.com/bnb-chain/bsc/pull/3087) bsc2: fix block sidecar fetching issue
+[\#3090](https://github.com/bnb-chain/bsc/pull/3090) chore: update maxwell contrats addresses
+[\#3091](https://github.com/bnb-chain/bsc/pull/3091) chore: fix several occasional issues for EVN
+[\#3049](https://github.com/bnb-chain/bsc/pull/3049) upstream: pick bugfix and feature from latest geth v1.5.9
+[\#3096](https://github.com/bnb-chain/bsc/pull/3096) config: update BSC Testnet hardfork time: Maxwell
+
+### BUGFIX
+[\#3050](https://github.com/bnb-chain/bsc/pull/3050) miner: fix memory leak caused by no discard env
+[\#3061](https://github.com/bnb-chain/bsc/pull/3061) p2p: fix bscExt checking logic
+
+### IMPROVEMENT
+[\#3034](https://github.com/bnb-chain/bsc/pull/3034) miner: optimize clear up logic for envs
+[\#3039](https://github.com/bnb-chain/bsc/pull/3039) Revert "miner: limit block size to eth protocol msg size (#2696)"
+[\#3041](https://github.com/bnb-chain/bsc/pull/3041) feat: add json-rpc-api.md
+[\#3057](https://github.com/bnb-chain/bsc/pull/3057) eth/protocols/bsc: adjust vote reception limit
+[\#3067](https://github.com/bnb-chain/bsc/pull/3067) ethclient/gethclient: add deduplication and max keys limit to GetProof
+[\#3063](https://github.com/bnb-chain/bsc/pull/3063) rpc: add method name length limit and configurable message size limit
+[\#3077](https://github.com/bnb-chain/bsc/pull/3077) performance: track large tx execution cost
+[\#3074](https://github.com/bnb-chain/bsc/pull/3074) jsutils: add tool GetLargeTxs
+[\#3082](https://github.com/bnb-chain/bsc/pull/3082) metrics: optimize mev metrics
+[\#3081](https://github.com/bnb-chain/bsc/pull/3081) miner: reset recommit timer on new block
+[\#3062](https://github.com/bnb-chain/bsc/pull/3062) refactor: use slices.Contains to simplify code
+[\#3088](https://github.com/bnb-chain/bsc/pull/3088) core/vote: change waiting blocks for voting since start mining
+[\#3089](https://github.com/bnb-chain/bsc/pull/3089) core/systemcontracts: remove lorentz/rialto
+[\#3085](https://github.com/bnb-chain/bsc/pull/0000) miner: fix goroutine leak
+
 ## v1.5.12
 ### BUGFIX
 [\#3057](https://github.com/bnb-chain/bsc/pull/3057) eth/protocols/bsc: adjust vote reception limit
@@ -758,7 +797,7 @@ IMPROVEMENT
 * [graphql: implement withdrawals (EIP-4895) (#27072)](https://github.com/bnb-chain/bsc/pull/1840/commits/fbe432fa1584bc976fe0242d999a7dd8903378b2)
 #### Client
 * [ethclient: add CallContractAtHash (#24355)](https://github.com/bnb-chain/bsc/pull/1700/commits/e98114da4feedf6dfb17b9839fc2c314cf1e5768)
-* [ethclient: add PeerCount method (#24849)](https://github.com/bnb-chain/bsc/pull/1840/commits/f5ff022dbca2b14af59974154874537b5ed4cc5e) 
+* [ethclient: add PeerCount method (#24849)](https://github.com/bnb-chain/bsc/pull/1840/commits/f5ff022dbca2b14af59974154874537b5ed4cc5e)
 * [ethereum, ethclient: add FeeHistory support (#25403)](https://github.com/bnb-chain/bsc/pull/1840/commits/9ad508018e4790da0c1c00ac355f206fca12ab7c)
 * [eth/filters, ethclient/gethclient: add fullTx option to pending tx fi…](https://github.com/bnb-chain/bsc/pull/1840/commits/5b1a04b9c749d804b51159fe12246c56de8515c1)
 * [ethclient: include withdrawals in ethclient block responses (#26778)](https://github.com/bnb-chain/bsc/pull/1840/commits/e1b98f49a5075694c5022f5ec74425e40da415dd)
@@ -1197,17 +1236,17 @@ BUGFIX
 ## v1.1.8
 FEATURES
 * [\#668](https://github.com/bnb-chain/bsc/pull/668) implement State Verification && Snapshot Commit pipeline
-* [\#581](https://github.com/bnb-chain/bsc/pull/581) implement geth native trace 
+* [\#581](https://github.com/bnb-chain/bsc/pull/581) implement geth native trace
 * [\#543](https://github.com/bnb-chain/bsc/pull/543) implement offline block prune tools
 
 IMPROVEMENT
-* [\#704](https://github.com/bnb-chain/bsc/pull/704) prefetch state by applying the transactions within one block 
+* [\#704](https://github.com/bnb-chain/bsc/pull/704) prefetch state by applying the transactions within one block
 * [\#713](https://github.com/bnb-chain/bsc/pull/713) add ARM binaries for release pipeline
 
 BUGFIX
 * [\#667](https://github.com/bnb-chain/bsc/pull/667) trie: reject deletions when verifying range proofs #667
 * [\#643](https://github.com/bnb-chain/bsc/pull/643) add timeout for stopping p2p server to fix can not gracefully shutdown issue
-* [\#740](https://github.com/bnb-chain/bsc/pull/740) update discord link which won't expire 
+* [\#740](https://github.com/bnb-chain/bsc/pull/740) update discord link which won't expire
 
 ## v1.1.7
 
@@ -1251,7 +1290,7 @@ Improvement
 * [\#449](https://github.com/bnb-chain/bsc/pull/449) cache bitmap and change the cache type of GetCode
 * [\#454](https://github.com/bnb-chain/bsc/pull/454) fix cache key do not have hash func
 * [\#446](https://github.com/bnb-chain/bsc/pull/446) parallel bloom calculation
-* [\#442](https://github.com/bnb-chain/bsc/pull/442) ignore empty tx in GetDiffAccountsWithScope 
+* [\#442](https://github.com/bnb-chain/bsc/pull/442) ignore empty tx in GetDiffAccountsWithScope
 * [\#426](https://github.com/bnb-chain/bsc/pull/426) add block proccess backoff time when validator is not in turn and received in turn block
 * [\#398](https://github.com/bnb-chain/bsc/pull/398) ci pipeline for release page
 
@@ -1264,7 +1303,7 @@ BUGFIX
 
 
 FEATURES
-* [\#431](https://github.com/bnb-chain/bsc/pull/431) Export get diff accounts in block api 
+* [\#431](https://github.com/bnb-chain/bsc/pull/431) Export get diff accounts in block api
 * [\#412](https://github.com/bnb-chain/bsc/pull/412) add extension in eth protocol handshake to disable tx broadcast
 * [\#376](https://github.com/bnb-chain/bsc/pull/376) implement diff sync
 
@@ -1280,7 +1319,7 @@ IMPROVEMENT
 BUGFIX
 * [\#350](https://github.com/bnb-chain/bsc/pull/350) flag: fix TriesInmemory specified but not work
 * [\#358](https://github.com/bnb-chain/bsc/pull/358) miner: fix null pending block
-* [\#360](https://github.com/bnb-chain/bsc/pull/360) pruner: fix state bloom sync permission in Windows 
+* [\#360](https://github.com/bnb-chain/bsc/pull/360) pruner: fix state bloom sync permission in Windows
 * [\#366](https://github.com/bnb-chain/bsc/pull/366) fix double close channel of subfetcher
 
 
@@ -1309,12 +1348,12 @@ BUGFIX
 
 ## v1.0.7
 * [\#120](https://github.com/bnb-chain/bsc/pull/120) add health check endpoint
-* [\#116](https://github.com/bnb-chain/bsc/pull/116) validator only write database state when enough distance 
+* [\#116](https://github.com/bnb-chain/bsc/pull/116) validator only write database state when enough distance
 * [\#115](https://github.com/bnb-chain/bsc/pull/115) add batch query methods
 * [\#112](https://github.com/bnb-chain/bsc/pull/112) apply max commit tx time for miner worker to avoid empty block
 * [\#101](https://github.com/bnb-chain/bsc/pull/101) apply block number limit for the `eth_getLogs` api
 * [\#99](https://github.com/bnb-chain/bsc/pull/99) enable directbroadcast flag to decrease the block propagation time
-* [\#90](https://github.com/bnb-chain/bsc/pull/90) add tini in docker image 
+* [\#90](https://github.com/bnb-chain/bsc/pull/90) add tini in docker image
 * [\#84](https://github.com/bnb-chain/bsc/pull/84) add jq in docker image
 
 
@@ -1324,11 +1363,11 @@ BUGFIX
 ## v1.0.5
 
 SECURITY
-* [\#63](https://github.com/bnb-chain/bsc/pull/63) security patches from go-ethereum 
+* [\#63](https://github.com/bnb-chain/bsc/pull/63) security patches from go-ethereum
 * [\#54](https://github.com/bnb-chain/bsc/pull/54) les: fix GetProofsV2 that could potentially cause a panic.
 
 FEATURES
-* [\#56](https://github.com/bnb-chain/bsc/pull/56) apply mirror sync upgrade 
+* [\#56](https://github.com/bnb-chain/bsc/pull/56) apply mirror sync upgrade
 * [\#53](https://github.com/bnb-chain/bsc/pull/53) support fork id in header; elegant upgrade
 
 IMPROVEMENT
@@ -1336,17 +1375,17 @@ IMPROVEMENT
 * [\#60](https://github.com/bnb-chain/bsc/pull/61) add rpc method request gauge
 
 BUGFIX
-* [\#59](https://github.com/bnb-chain/bsc/pull/59) fix potential deadlock of pub/sub module 
+* [\#59](https://github.com/bnb-chain/bsc/pull/59) fix potential deadlock of pub/sub module
 
 
 
 ## v1.0.4
 
 IMPROVEMENT
-* [\#35](https://github.com/bnb-chain/bsc/pull/35) use fixed gas price when network is idle 
-* [\#38](https://github.com/bnb-chain/bsc/pull/38) disable noisy log from consensus engine 
+* [\#35](https://github.com/bnb-chain/bsc/pull/35) use fixed gas price when network is idle
+* [\#38](https://github.com/bnb-chain/bsc/pull/38) disable noisy log from consensus engine
 * [\#47](https://github.com/bnb-chain/bsc/pull/47) upgrade to golang1.15.5
-* [\#49](https://github.com/bnb-chain/bsc/pull/49) Create pull request template for all developer to follow 
+* [\#49](https://github.com/bnb-chain/bsc/pull/49) Create pull request template for all developer to follow
 
 
 ## v1.0.3
@@ -1362,7 +1401,7 @@ IMPROVEMENT
 ## v1.0.1-beta
 
 IMPROVEMENT
-* [\#22](https://github.com/bnb-chain/bsc/pull/22) resolve best practice advice 
+* [\#22](https://github.com/bnb-chain/bsc/pull/22) resolve best practice advice
 
 FEATURES
 * [\#23](https://github.com/bnb-chain/bsc/pull/23) enforce backoff time for out-turn validator
@@ -1381,10 +1420,10 @@ FEATURES
 * [\#15](https://github.com/bnb-chain/bsc/pull/15) Allow liveness slash fail
 
 IMPROVEMENT
-* [\#11](https://github.com/bnb-chain/bsc/pull/11) remove redundant gaslimit check 
+* [\#11](https://github.com/bnb-chain/bsc/pull/11) remove redundant gaslimit check
 
 BUGFIX
 * [\#4](https://github.com/bnb-chain/bsc/pull/4) fix validator failed to sync a block produced by itself
-* [\#6](https://github.com/bnb-chain/bsc/pull/6) modify params for Parlia consensus with 21 validators 
+* [\#6](https://github.com/bnb-chain/bsc/pull/6) modify params for Parlia consensus with 21 validators
 * [\#10](https://github.com/bnb-chain/bsc/pull/10) add gas limit check in parlia implement
 * [\#13](https://github.com/bnb-chain/bsc/pull/13) fix debug_traceTransaction crashed issue
