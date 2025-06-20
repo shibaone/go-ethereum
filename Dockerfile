@@ -11,7 +11,7 @@ WORKDIR ${BOR_DIR}
 COPY . .
 RUN make bor
 
-RUN cp build/bin/bor /usr/local/bin/bor
+RUN cp build/bin/bor /usr/bin/
 
 ENV SHELL /bin/bash
 EXPOSE 8545 8546 8547 30303 30303/udp
