@@ -8,6 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
+	"golang.org/x/crypto/sha3"
 
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -67,6 +69,43 @@ func GetSystemMessage(toAddress common.Address, data []byte) Callmsg {
 	}
 }
 
+func getFirehose2CompatibleHash(spanID uint64, msg Callmsg) common.Hash {
+	var txHash common.Hash
+	sha := sha3.NewLegacyKeccak256().(crypto.KeccakState)
+	sha.Reset()
+	compatMsg := CompatCallMsg{
+		CompatEthCallMsg{
+			From:       msg.CallMsg.From,
+			To:         msg.CallMsg.To,
+			Gas:        msg.CallMsg.Gas,
+			GasPrice:   msg.CallMsg.GasPrice,
+			GasFeeCap:  msg.CallMsg.GasFeeCap,
+			GasTipCap:  msg.CallMsg.GasTipCap,
+			Value:      msg.CallMsg.Value,
+			Data:       msg.CallMsg.Data,
+			AccessList: msg.CallMsg.AccessList,
+		},
+	}
+	rlp.Encode(sha, []interface{}{spanID, compatMsg})
+	sha.Read(txHash[:])
+	return txHash
+}
+
+type CompatEthCallMsg struct {
+	From       common.Address   // the sender of the 'transaction'
+	To         *common.Address  // the destination contract (nil for contract creation)
+	Gas        uint64           // if 0, the call executes with near-infinite gas
+	GasPrice   *big.Int         // wei <-> gas exchange ratio
+	GasFeeCap  *big.Int         // EIP-1559 fee cap per gas.
+	GasTipCap  *big.Int         // EIP-1559 tip per gas.
+	Value      *big.Int         // amount of wei sent along with the call
+	Data       []byte           // input data, usually an ABI-encoded contract method invocation
+	AccessList types.AccessList // EIP-2930 access list.
+}
+type CompatCallMsg struct {
+	CompatEthCallMsg
+}
+
 // apply message
 func ApplyMessage(
 	_ context.Context,
@@ -76,6 +115,7 @@ func ApplyMessage(
 	chainConfig *params.ChainConfig,
 	chainContext core.ChainContext,
 	tracer *tracing.Hooks,
+	spanID uint64,
 ) (uint64, error) {
 
 	tx := types.NewTx(&types.LegacyTx{
@@ -97,7 +137,11 @@ func ApplyMessage(
 	vmenv := vm.NewEVM(blockContext, state, chainConfig, vm.Config{Tracer: tracer})
 
 	if tracer != nil {
-		if tracer.OnTxStart != nil {
+		switch {
+		case tracer.OnTxStartWithHash != nil: // firehose has this hook that allows forcing a hash to some special system transactions
+			txHash := getFirehose2CompatibleHash(spanID, msg)
+			tracer.OnTxStartWithHash(vmenv.GetVMContext(), tx, msg.From(), txHash)
+		case tracer.OnTxStart != nil:
 			tracer.OnTxStart(vmenv.GetVMContext(), tx, msg.From())
 		}
 	}

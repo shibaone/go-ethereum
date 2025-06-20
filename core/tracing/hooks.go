@@ -86,6 +86,9 @@ type (
 	// to be used for address of the caller.
 	TxStartHook = func(vm *VMContext, tx *types.Transaction, from common.Address)
 
+	// TxStartWithHashHook is used by firehose when processing special transactions that have a hash artificially set (for compatibility with older versions fh2.x)
+	TxStartWithHashHook = func(vm *VMContext, tx *types.Transaction, from common.Address, hash common.Hash)
+
 	// TxEndHook is called after the execution of a transaction ends.
 	TxEndHook = func(receipt *types.Receipt, err error)
 
@@ -190,13 +193,14 @@ type (
 
 type Hooks struct {
 	// VM events
-	OnTxStart   TxStartHook
-	OnTxEnd     TxEndHook
-	OnEnter     EnterHook
-	OnExit      ExitHook
-	OnOpcode    OpcodeHook
-	OnFault     FaultHook
-	OnGasChange GasChangeHook
+	OnTxStart         TxStartHook
+	OnTxStartWithHash TxStartWithHashHook
+	OnTxEnd           TxEndHook
+	OnEnter           EnterHook
+	OnExit            ExitHook
+	OnOpcode          OpcodeHook
+	OnFault           FaultHook
+	OnGasChange       GasChangeHook
 	// Chain events
 	OnBlockchainInit    BlockchainInitHook
 	OnClose             CloseHook
