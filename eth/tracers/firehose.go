@@ -88,12 +88,13 @@ func NewTracingHooksFromFirehose(tracer *Firehose) *tracing.Hooks {
 		OnSkippedBlock:   tracer.OnSkippedBlock,
 		OnClose:          tracer.OnClose,
 
-		OnTxStart: tracer.OnTxStart,
-		OnTxEnd:   tracer.OnTxEnd,
-		OnEnter:   tracer.OnCallEnter,
-		OnExit:    tracer.OnCallExit,
-		OnOpcode:  tracer.OnOpcode,
-		OnFault:   tracer.OnOpcodeFault,
+		OnTxStart:         tracer.OnTxStart,
+		OnTxStartWithHash: tracer.OnTxStartWithHash,
+		OnTxEnd:           tracer.OnTxEnd,
+		OnEnter:           tracer.OnCallEnter,
+		OnExit:            tracer.OnCallExit,
+		OnOpcode:          tracer.OnOpcode,
+		OnFault:           tracer.OnOpcodeFault,
 
 		OnBalanceChange: tracer.OnBalanceChange,
 		OnNonceChange:   tracer.OnNonceChange,
@@ -683,7 +684,11 @@ func (f *Firehose) OnSystemCallEnd() {
 }
 
 func (f *Firehose) OnTxStart(evm *tracing.VMContext, tx *types.Transaction, from common.Address) {
-	firehoseInfo("trx start (tracer=%s hash=%s %s type=%d gas=%d isolated=%t input=%s)", f.tracerID, tx.Hash(), fromToTxView(&from, tx), tx.Type(), tx.Gas(), f.transactionIsolated, inputView(tx.Data()))
+	f.OnTxStartWithHash(evm, tx, from, tx.Hash())
+}
+
+func (f *Firehose) OnTxStartWithHash(evm *tracing.VMContext, tx *types.Transaction, from common.Address, hash common.Hash) {
+	firehoseInfo("trx start (tracer=%s hash=%s %s type=%d gas=%d isolated=%t input=%s)", f.tracerID, hash, fromToTxView(&from, tx), tx.Type(), tx.Gas(), f.transactionIsolated, inputView(tx.Data()))
 
 	f.ensureInBlockAndNotInTrxAndNotInCall()
 
@@ -713,8 +718,7 @@ func (f *Firehose) OnTxStart(evm *tracing.VMContext, tx *types.Transaction, from
 			f.blockOrdinal.Reset()
 		}
 	}
-
-	f.onTxStart(tx, tx.Hash(), from, to)
+	f.onTxStart(tx, hash, from, to)
 }
 
 // onTxStart is used internally a two places, in the normal "tracer" and in the "OnGenesisBlock",
