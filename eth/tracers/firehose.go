@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -215,6 +217,7 @@ type Firehose struct {
 	inSystemCall         bool
 	transactionIsolated  bool
 	transactionTransient *pbeth.TransactionTrace
+	systemTxHashes       hashes
 
 	// Call state
 	callStack               *CallStack
@@ -522,6 +525,7 @@ func (f *Firehose) OnBlockEnd(err error) {
 	firehoseInfo("block ending (err=%s)", errorView(err))
 
 	if err == nil {
+		f.combinePolygonSystemTransactions()
 		if f.blockReorderOrdinal {
 			f.reorderIsolatedTransactionsAndOrdinals()
 		}
@@ -541,7 +545,6 @@ func (f *Firehose) OnBlockEnd(err error) {
 		} else {
 			f.printBlockToFirehose(f.block, f.blockFinality)
 		}
-
 	} else {
 		// An error occurred, could have happen in transaction/call context, we must not check if in trx/call, only check in block
 		f.ensureInBlock(0)
@@ -898,25 +901,32 @@ func (f *Firehose) discardUncommittedSetCodeAuthorization(rootCall *pbeth.Call) 
 }
 
 func (f *Firehose) removeLogBlockIndexOnStateRevertedCalls() {
-	for _, call := range f.transaction.Calls {
-		if call.StateReverted {
-			for _, log := range call.Logs {
-				if isPolygon && isPolygonFeeTransferLog(log) {
-					// Polygon transfer and fee transfer logs are never reverted, so we must **not** reset them here as
-					// they are properly recorded to the chain's state.
-					continue
-				}
+	for _, trace := range f.block.TransactionTraces {
+		if f.systemTxHashes.Contains(trace.Hash) {
+			continue
+		}
+		for _, call := range trace.Calls {
+			if call.StateReverted {
+				for _, log := range call.Logs {
+					if isPolygon && isPolygonFeeTransferLog(log) {
+						// Polygon transfer and fee transfer logs are never reverted, so we must **not** reset them here as
+						// they are properly recorded to the chain's state.
+						continue
+					}
 
-				firehoseTrace("removing block index from log %s in reverted call %d", hex.EncodeToString(log.Address), call.Index)
-				log.BlockIndex = 0
+					firehoseTrace("removing block index from log %s in reverted call %d", hex.EncodeToString(log.Address), call.Index)
+					log.BlockIndex = 0
+				}
 			}
 		}
 	}
 }
 
 var (
+	//nolint:unused // Used in isPolygonFeeTransferLog function
 	polygonTransferFeeLogSig = common.HexToHash("0x4dfe1bbbcf077ddc3e01291eea2d5c70c2b422b415d95645b9adcfd678cb1d63")
-	polygonFeeAddress        = common.HexToAddress("0x0000000000000000000000000000000000001010")
+	//nolint:unused // Used in isPolygonFeeTransferLog function
+	polygonFeeAddress = common.HexToAddress("0x0000000000000000000000000000000000001010")
 )
 
 //go:inline
@@ -2366,7 +2376,6 @@ func maxFeePerGas(tx *types.Transaction) *pbeth.BigInt {
 		return firehoseBigIntFromNative(tx.GasFeeCap())
 
 	}
-
 	panic(errUnhandledTransactionType("maxFeePerGas", tx.Type()))
 }
 
@@ -2961,4 +2970,199 @@ func (m Memory) GetPtr(offset, size int64) []byte {
 	// In this situation, we must pad with zeroes when the memory is not big enough.
 	reminder := m[min(offset, int64(len(m))):]
 	return append(reminder, make([]byte, int(size)-len(reminder))...)
+}
+
+var (
+	polygonSystemAddress        = common.HexToAddress("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE")
+	polygonStateReceiverAddress = common.HexToAddress("0x0000000000000000000000000000000000001001")
+	polygonValidatorContract    = common.HexToAddress("0x0000000000000000000000000000000000001000")
+	nullAddress                 = common.HexToAddress("0x0000000000000000000000000000000000000000")
+	bigIntZero                  = pbeth.BigIntFromBytes(nil)
+)
+
+type hashes [][]byte
+type BloomFilter [256]byte
+
+// combinePolygonSystemTransactions will identify transactions that are "system transactions" and merge them into a single transaction with a predictive name, like the `bor` client does.
+// It reorders the calls and logs to match expected output from RPC API.
+func (f *Firehose) combinePolygonSystemTransactions() {
+	var systemTransactionsToMerge []*pbeth.TransactionTrace
+	var unmergeableSystemTransactions []*pbeth.TransactionTrace
+	var out []*pbeth.TransactionTrace
+	var systemTransactionHashes hashes
+	normalTransactions := make([]*pbeth.TransactionTrace, 0, len(f.block.TransactionTraces))
+
+	highestTrxIndex := int64(-1) // negative so that next one is 0 if no normal transaction is met
+	for _, trace := range f.block.TransactionTraces {
+		if bytes.Equal(trace.From, polygonSystemAddress.Bytes()) {
+			if bytes.Equal(trace.To, polygonStateReceiverAddress.Bytes()) {
+				systemTransactionsToMerge = append(systemTransactionsToMerge, trace)
+				continue
+			}
+			if bytes.Equal(trace.To, polygonValidatorContract.Bytes()) {
+				unmergeableSystemTransactions = append(unmergeableSystemTransactions, trace)
+				continue
+			}
+			// no other know case for polygon
+		}
+		if int64(trace.Index) > highestTrxIndex {
+			highestTrxIndex = int64(trace.Index)
+		}
+		normalTransactions = append(normalTransactions, trace)
+	}
+
+	out = normalTransactions
+	if systemTransactionsToMerge == nil && unmergeableSystemTransactions == nil {
+		return
+	}
+	if systemTransactionsToMerge != nil {
+		var allCalls []*pbeth.Call
+		var allLogs []*pbeth.Log
+		var beginOrdinal uint64
+		var seenFirstBeginOrdinal bool
+
+		var seenFirstCallOrdinal bool
+		var lowestCallBeginOrdinal uint64
+		var highestCallEndOrdinal uint64
+
+		var endOrdinal uint64
+		var callIdxOffset = uint32(1) // initial offset for all calls because of artificial top level call
+
+		for _, trace := range systemTransactionsToMerge {
+			var trxLogs []*pbeth.Log
+			if !seenFirstBeginOrdinal || trace.BeginOrdinal < beginOrdinal {
+				beginOrdinal = trace.BeginOrdinal
+				seenFirstBeginOrdinal = true
+			}
+
+			if trace.EndOrdinal > endOrdinal {
+				endOrdinal = trace.EndOrdinal
+			}
+			highestCallIndex := callIdxOffset
+			for _, call := range trace.Calls {
+				if !seenFirstCallOrdinal || call.BeginOrdinal < lowestCallBeginOrdinal {
+					lowestCallBeginOrdinal = call.BeginOrdinal
+					seenFirstCallOrdinal = true
+				}
+				if call.EndOrdinal > highestCallEndOrdinal {
+					highestCallEndOrdinal = call.EndOrdinal
+				}
+
+				call.Index += callIdxOffset
+
+				// all top level calls must be children of the very first (artificial) call.
+				call.Depth += 1
+				if call.ParentIndex == 0 {
+					call.ParentIndex = 1
+				} else {
+					call.ParentIndex += callIdxOffset
+				}
+				if call.Index > highestCallIndex {
+					highestCallIndex = call.Index
+				}
+				allCalls = append(allCalls, call)
+				// the receipt.logs on these transactions is not populated before
+				for _, log := range call.Logs {
+					if !call.StateReverted || isPolygonFeeTransferLog(log) {
+						trxLogs = append(trxLogs, log)
+					}
+				}
+			}
+			callIdxOffset = highestCallIndex
+
+			sort.Slice(trxLogs, func(i, j int) bool {
+				return trxLogs[i].BlockIndex < trxLogs[j].BlockIndex
+			})
+			allLogs = append(allLogs, trxLogs...)
+		}
+		artificialTopLevelCall := &pbeth.Call{
+			Index:        1,
+			ParentIndex:  0,
+			Depth:        0,
+			CallType:     pbeth.CallType_CALL,
+			GasLimit:     0,
+			GasConsumed:  0,
+			Caller:       nullAddress.Bytes(),
+			Address:      nullAddress.Bytes(),
+			Value:        bigIntZero,
+			Input:        nil,
+			GasChanges:   nil,
+			BeginOrdinal: lowestCallBeginOrdinal,
+			EndOrdinal:   highestCallEndOrdinal,
+		}
+		allCalls = append([]*pbeth.Call{artificialTopLevelCall}, allCalls...)
+
+		mergedHash := computePolygonHash(f.block.Number, f.block.Hash)
+		mergedSystemTrx := &pbeth.TransactionTrace{
+			Hash:         mergedHash,
+			From:         nullAddress.Bytes(),
+			To:           nullAddress.Bytes(),
+			Nonce:        0,
+			GasPrice:     bigIntZero,
+			GasLimit:     0,
+			Value:        bigIntZero,
+			Index:        uint32(highestTrxIndex + 1),
+			Input:        nil,
+			GasUsed:      0,
+			Type:         pbeth.TransactionTrace_TRX_TYPE_LEGACY,
+			BeginOrdinal: beginOrdinal,
+			EndOrdinal:   endOrdinal,
+			Calls:        allCalls,
+			Status:       pbeth.TransactionTraceStatus_SUCCEEDED,
+			Receipt: &pbeth.TransactionReceipt{
+				Logs:      allLogs,
+				LogsBloom: computeLogsBloom(allLogs),
+				// CumulativeGasUsed // Reported as empty from the API. does not impact much because it is the last transaction in the block, this is reset every block.
+				// StateRoot // Deprecated EIP 658
+			},
+		}
+		systemTransactionHashes = append(systemTransactionHashes, mergedHash)
+		out = append(out, mergedSystemTrx)
+		highestTrxIndex++
+	}
+	for _, tx := range unmergeableSystemTransactions {
+		tx.Index = uint32(highestTrxIndex + 1)
+		systemTransactionHashes = append(systemTransactionHashes, tx.Hash)
+		out = append(out, tx)
+		highestTrxIndex++
+	}
+
+	f.block.TransactionTraces = out
+	f.systemTxHashes = systemTransactionHashes
+
+	return
+}
+
+func (b *BloomFilter) add(data []byte) {
+	hash := crypto.Keccak256(data)
+	b[256-uint((binary.BigEndian.Uint16(hash)&0x7ff)>>3)-1] |= byte(1 << (hash[1] & 0x7))
+	b[256-uint((binary.BigEndian.Uint16(hash[2:])&0x7ff)>>3)-1] |= byte(1 << (hash[3] & 0x7))
+	b[256-uint((binary.BigEndian.Uint16(hash[4:])&0x7ff)>>3)-1] |= byte(1 << (hash[5] & 0x7))
+}
+
+func computeLogsBloom(logs []*pbeth.Log) []byte {
+	var bf = new(BloomFilter)
+	for _, log := range logs {
+		bf.add(log.Address)
+		for _, topic := range log.Topics {
+			bf.add(topic)
+		}
+	}
+	return bf[:]
+}
+
+func computePolygonHash(blockNum uint64, blockHash []byte) []byte {
+	enc := make([]byte, 8)
+	binary.BigEndian.PutUint64(enc, blockNum)
+	key := append(append([]byte("matic-bor-receipt-"), enc...), blockHash...)
+	return crypto.Keccak256(key)
+}
+
+func (h hashes) Contains(in []byte) bool {
+	for _, hash := range h {
+		if bytes.Equal(hash, in) {
+			return true
+		}
+	}
+	return false
 }
