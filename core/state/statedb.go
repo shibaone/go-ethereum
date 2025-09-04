@@ -808,16 +808,16 @@ func (s *StateDB) SubBalance(addr common.Address, amount *uint256.Int, reason tr
 	return stateObject.SetBalance(new(uint256.Int).Sub(stateObject.Balance(), amount))
 }
 
+// SetBalance sets amount to the account associated with addr.
 func (s *StateDB) SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason) uint256.Int {
 	stateObject := s.getOrNewStateObject(addr)
-	var prevBalance uint256.Int
-
-	if stateObject != nil {
-		stateObject = s.mvRecordWritten(stateObject)
-		prevBalance = stateObject.SetBalance(amount)
-		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
+	if stateObject == nil {
+		return uint256.Int{}
 	}
-	return prevBalance
+
+	stateObject = s.mvRecordWritten(stateObject)
+	MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
+	return stateObject.SetBalance(amount)
 }
 
 func (s *StateDB) SetNonce(addr common.Address, nonce uint64, reason tracing.NonceChangeReason) {
@@ -1947,17 +1947,7 @@ func (s *StateDB) AccessEvents() *AccessEvents {
 	return s.accessEvents
 }
 
-// Polygon specific
-
-func (s *StateDB) Clone() any {
-	return s.Copy()
-}
-
-func (s *StateDB) Unhooked() any {
-	// Already unhooked, just return self
+// Inner receives the underlying state db
+func (s *StateDB) Inner() *StateDB {
 	return s
-}
-
-func (s *StateDB) SetBorConsensusTime(borConsensusTime time.Duration) {
-	s.BorConsensusTime = borConsensusTime
 }

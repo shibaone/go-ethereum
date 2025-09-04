@@ -11,6 +11,7 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	clerk "github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	statefull "github.com/ethereum/go-ethereum/consensus/bor/statefull"
+	state "github.com/ethereum/go-ethereum/core/state"
 	tracing "github.com/ethereum/go-ethereum/core/tracing"
 	types "github.com/ethereum/go-ethereum/core/types"
 	vm "github.com/ethereum/go-ethereum/core/vm"
@@ -56,7 +57,7 @@ func (mr *MockGenesisContractMockRecorder) CommitState(arg0, arg1, arg2, arg3, a
 }
 
 // LastStateId mocks base method.
-func (m *MockGenesisContract) LastStateId(arg0 vm.StateDB, arg1 uint64, arg2 common.Hash) (*big.Int, error) {
+func (m *MockGenesisContract) LastStateId(arg0 *state.StateDB, arg1 uint64, arg2 common.Hash) (*big.Int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LastStateId", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*big.Int)

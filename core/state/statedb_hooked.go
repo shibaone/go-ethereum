@@ -18,10 +18,8 @@ package state
 
 import (
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -291,34 +289,7 @@ func (s *hookedStateDB) Finalise(deleteEmptyObjects bool) {
 	}
 }
 
-func (s *hookedStateDB) GetLogs(txHash common.Hash, blockNumber uint64, blockHash common.Hash) []*types.Log {
-	return s.inner.GetLogs(txHash, blockNumber, blockHash)
-}
-
-func (s *hookedStateDB) GetMVHashmap() *blockstm.MVHashMap {
-	return s.inner.GetMVHashmap()
-}
-func (s *hookedStateDB) SetMVHashmap(mvHashmap *blockstm.MVHashMap) {
-	s.inner.SetMVHashmap(mvHashmap)
-}
-func (s *hookedStateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
-	return s.inner.IntermediateRoot(deleteEmptyObjects)
-}
-func (s *hookedStateDB) IsVerkle() bool {
-	return s.inner.IsVerkle()
-}
-func (s *hookedStateDB) TxIndex() int {
-	return s.inner.TxIndex()
-}
-func (s *hookedStateDB) SetTxContext(txHash common.Hash, txIndex int) {
-	s.inner.SetTxContext(txHash, txIndex)
-}
-func (s *hookedStateDB) Clone() any {
-	return NewHookedState(s.inner.Copy(), s.hooks)
-}
-func (s *hookedStateDB) Unhooked() any {
+// Inner receives the underlying state db
+func (s *hookedStateDB) Inner() *StateDB {
 	return s.inner
-}
-func (s *hookedStateDB) SetBorConsensusTime(borConsensusTime time.Duration) {
-	s.inner.SetBorConsensusTime(borConsensusTime)
 }

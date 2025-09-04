@@ -17,10 +17,7 @@
 package vm
 
 import (
-	"time"
-
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -37,6 +34,7 @@ type StateDB interface {
 
 	SubBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
 	AddBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
+	SetBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int // Needed for bor consensus
 	GetBalance(common.Address) *uint256.Int
 
 	GetNonce(common.Address) uint64
@@ -105,28 +103,12 @@ type StateDB interface {
 	// Finalise must be invoked at the end of a transaction
 	Finalise(bool)
 
-	// Polygon Specific StateDB methods
-	GetMVHashmap() *blockstm.MVHashMap
-	SetMVHashmap(mvHashmap *blockstm.MVHashMap)
-	IntermediateRoot(deleteEmptyObjects bool) common.Hash
-	IsVerkle() bool
+	// Inner returns the underlying state instance. Needed for bor consensus.
+	Inner() *state.StateDB
+
+	// Firehose Requirements
+
+	// GetLogs is needed for Firehose within Polygon Bor consensus engine where on [bor.ApplyMessage]
+	// we need to make a receipt and as such, retrieve the logs.
 	GetLogs(txHash common.Hash, blockNumber uint64, blockHash common.Hash) []*types.Log
-	TxIndex() int
-	SetTxContext(txHash common.Hash, txIndex int)
-	SetBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
-	// Clone is used to create a copy of the StateDB, same as `Copy` on *state.StateDB but rename so interface has its own name
-	//
-	//   state.Clone().(vm.StateDB)
-	//
-	// The `any` return type is required to avoid import cycles.
-	Clone() any
-	// Unhooked is used to return the underlying state without any hooks applied, in Polygon, some potential
-	// state modifying operations can be called on a vm.StateDB interface, which might be hooked but we want those
-	// operation to always be non-recorded, this method ensures this.
-	//
-	//   state.Unhooked().(vm.StateDB)
-	//
-	// The `any` return type is required to avoid import cycles.
-	Unhooked() any
-	SetBorConsensusTime(borConsensusTime time.Duration)
 }

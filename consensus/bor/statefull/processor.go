@@ -117,17 +117,6 @@ func ApplyMessage(
 	tracer *tracing.Hooks,
 	spanID uint64,
 ) (uint64, error) {
-
-	tx := types.NewTx(&types.LegacyTx{
-		Nonce:    msg.Nonce(),
-		GasPrice: msg.GasPrice(),
-		Gas:      msg.Gas(),
-		To:       msg.To(),
-		Value:    msg.Value(),
-		Data:     msg.Data(),
-	})
-	state.SetTxContext(tx.Hash(), 0)
-
 	initialGas := msg.Gas()
 
 	blockContext := core.NewEVMBlockContext(header, chainContext, &header.Coinbase)
@@ -136,7 +125,17 @@ func ApplyMessage(
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(blockContext, state, chainConfig, vm.Config{Tracer: tracer})
 
+	var tx *types.Transaction
 	if tracer != nil {
+		tx = types.NewTx(&types.LegacyTx{
+			Nonce:    msg.Nonce(),
+			GasPrice: msg.GasPrice(),
+			Gas:      msg.Gas(),
+			To:       msg.To(),
+			Value:    msg.Value(),
+			Data:     msg.Data(),
+		})
+
 		switch {
 		case tracer.OnTxStartWithHash != nil: // firehose has this hook that allows forcing a hash to some special system transactions
 			txHash := getFirehose2CompatibleHash(spanID, msg)

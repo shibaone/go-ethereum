@@ -70,7 +70,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 	_, err = core.ApplyTransactionWithEVM(
 		msg,
 		new(core.GasPool).AddGas(block.GasLimit()),
-		statedbHooked,
+		statedbHooked.Inner(),
 		header.Number,
 		header.Hash(),
 		tx,
