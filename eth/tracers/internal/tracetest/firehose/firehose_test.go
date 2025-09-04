@@ -219,11 +219,11 @@ func testBlockTracesCorrectly(t *testing.T, genesisSpec *core.Genesis, engine co
 
 				chain.SetBlockValidatorAndProcessorForTesting(
 					ignoreValidateStateValidator{core.NewBlockValidator(genesisSpec.Config, chain)},
-					core.NewStateProcessor(genesisSpec.Config, chain.HeaderChain(), chain),
+					core.NewStateProcessor(genesisSpec.Config, chain.HeaderChain()),
 				)
 
 				defer chain.Stop()
-				n, err := chain.InsertChain(blocks)
+				n, err := chain.InsertChain(blocks, false)
 				require.NoError(t, err, "failed to insert chain block %d", n)
 
 				tracer.OnClose()
