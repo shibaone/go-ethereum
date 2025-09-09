@@ -95,7 +95,7 @@ func TestPastChainInsert(t *testing.T) {
 
 	_, _ = gspec.Commit(db, triedb.NewDatabase(db, triedb.HashDefaults))
 
-	hc, err := NewHeaderChain(db, gspec.Config, ethash.NewFaker(), func() bool { return false })
+	hc, err := NewHeaderChain(db, gspec.Config, ethash.NewFaker(), func() bool { return false }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestFutureChainInsert(t *testing.T) {
 
 	_, _ = gspec.Commit(db, triedb.NewDatabase(db, triedb.HashDefaults))
 
-	hc, err := NewHeaderChain(db, gspec.Config, ethash.NewFaker(), func() bool { return false })
+	hc, err := NewHeaderChain(db, gspec.Config, ethash.NewFaker(), func() bool { return false }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestOverlappingChainInsert(t *testing.T) {
 
 	_, _ = gspec.Commit(db, triedb.NewDatabase(db, triedb.HashDefaults))
 
-	hc, err := NewHeaderChain(db, gspec.Config, ethash.NewFaker(), func() bool { return false })
+	hc, err := NewHeaderChain(db, gspec.Config, ethash.NewFaker(), func() bool { return false }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

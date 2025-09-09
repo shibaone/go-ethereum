@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -72,11 +73,12 @@ type HeaderChain struct {
 	engine        consensus.Engine
 
 	stateSyncData []*types.StateSyncData // State sync data
+	logger        *tracing.Hooks         // used for firehose tracing
 }
 
 // NewHeaderChain creates a new HeaderChain structure. ProcInterrupt points
 // to the parent's interrupt semaphore.
-func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine consensus.Engine, procInterrupt func() bool) (*HeaderChain, error) {
+func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine consensus.Engine, procInterrupt func() bool, logger *tracing.Hooks) (*HeaderChain, error) {
 	hc := &HeaderChain{
 		config:        config,
 		chainDb:       chainDb,
@@ -85,6 +87,7 @@ func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine c
 		numberCache:   lru.NewCache[common.Hash, uint64](numberCacheLimit),
 		procInterrupt: procInterrupt,
 		engine:        engine,
+		logger:        logger,
 	}
 	hc.genesisHeader = hc.GetHeaderByNumber(0)
 

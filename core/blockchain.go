@@ -377,7 +377,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		checker:          checker,
 	}
 
-	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped)
+	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped, bc.logger)
 	if err != nil {
 		return nil, err
 	}
