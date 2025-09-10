@@ -143,6 +143,7 @@ func ApplyMessage(
 		case tracer.OnTxStart != nil:
 			tracer.OnTxStart(vmenv.GetVMContext(), tx, msg.From())
 		}
+		state.Inner().SetTxContext(tx.Hash(), 0)
 	}
 
 	// nolint : contextcheck
