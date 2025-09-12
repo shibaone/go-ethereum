@@ -1,4 +1,4 @@
-ARG FIREHOSE_CORE="18bb86f"
+ARG FIREHOSE_ETHEREUM="ce9ae75"
 
 # Build Bor in a stock Go builder container
 FROM golang:1.24-alpine AS builder
@@ -15,7 +15,7 @@ RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/cli/main.go
 
 # FIXME: Actually put Firehose Ethereum when it's properly built
 # Pull Bor into Firehose Core container (bor is statically linked, we can copy it from alpine to ubuntu)
-FROM ghcr.io/streamingfast/firehose-core:${FIREHOSE_CORE}
+FROM   ghcr.io/streamingfast/firehose-ethereum:{FIREHOSE_ETHEREUM}
 
 COPY --from=builder /go-ethereum/build/bin/main.go /usr/local/bin/bor
 RUN ln -s /usr/local/bin/bor /app/bor
