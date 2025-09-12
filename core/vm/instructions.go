@@ -17,7 +17,9 @@
 package vm
 
 import (
+	"fmt"
 	"math"
+	"runtime/debug"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -1040,6 +1042,10 @@ func makeLog(size int) executionFunc {
 		for i := 0; i < size; i++ {
 			addr := stack.pop()
 			topics[i] = addr.Bytes32()
+			if i == 0 {
+				fmt.Println("adding log", topics[i].String())
+				debug.PrintStack()
+			}
 		}
 
 		d := scope.Memory.GetCopy(mStart.Uint64(), mSize.Uint64())
