@@ -1031,6 +1031,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		case *core.BlockChain:
 			tracer = c.GetTracingHooks()
 		}
+		fmt.Println("INSIDE SPRINT START:", header.Number.Int64(), ", is it nil ?", tracer == nil)
 		// check and commit span
 		if !c.config.IsRio(header.Number) {
 			if err := c.checkAndCommitSpan(wrappedState, header, cx, tracer); err != nil {
