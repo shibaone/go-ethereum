@@ -3,6 +3,7 @@ package statefull
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"math/big"
 
@@ -139,6 +140,9 @@ func ApplyMessage(
 		switch {
 		case tracer.OnTxStartWithHash != nil: // firehose has this hook that allows forcing a hash to some special system transactions
 			txHash := getFirehose2CompatibleHash(spanID, msg)
+			if header.Number.Int64() == 26221152 {
+				fmt.Println("inside ApplyMessage", txHash.String(), tracer)
+			}
 			tracer.OnTxStartWithHash(vmenv.GetVMContext(), tx, msg.From(), txHash)
 		case tracer.OnTxStart != nil:
 			tracer.OnTxStart(vmenv.GetVMContext(), tx, msg.From())
@@ -146,6 +150,9 @@ func ApplyMessage(
 		state.Inner().SetTxContext(tx.Hash(), 0)
 	}
 
+	if header.Number.Int64() == 26221152 {
+		fmt.Println("about to call with vmenv", vmenv.Config.Tracer)
+	}
 	// nolint : contextcheck
 	// Apply the transaction to the current state (included in the env)
 	ret, gasLeft, err := vmenv.Call(

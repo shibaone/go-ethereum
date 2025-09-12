@@ -17,7 +17,9 @@
 package vm
 
 import (
+	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -1043,6 +1045,7 @@ func makeLog(size int) executionFunc {
 		}
 
 		d := scope.Memory.GetCopy(mStart.Uint64(), mSize.Uint64())
+		fmt.Println("type of statedb", reflect.TypeOf(interpreter.evm.StateDB))
 		interpreter.evm.StateDB.AddLog(&types.Log{
 			Address: scope.Contract.Address(),
 			Topics:  topics,
