@@ -81,7 +81,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.sf
+          file: ./Dockerfile.sf-${{ matrix.platform_suffix }}
           platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
