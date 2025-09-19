@@ -58,7 +58,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 	}
 
 	header := block.Header()
-	msg, err := core.TransactionToMessage(tx, types.MakeSigner(prestate.Genesis.Config, header.Number, header.Time, 40), header.BaseFee, core.MessageReplayMode)
+	msg, err := core.TransactionToMessage(tx, types.MakeSigner(prestate.Genesis.Config, header.Number, header.Time, 40), header.BaseFee, core.NewMessageReplayContext())
 	require.NoError(t, err)
 
 	blockContext := core.NewEVMBlockContext(block.Header(), prestate, &context.Coinbase)
