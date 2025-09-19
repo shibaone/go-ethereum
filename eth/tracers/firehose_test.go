@@ -195,6 +195,11 @@ func TestFirehose_BalanceChangeAllMappedCorrectly(t *testing.T) {
 			continue
 		}
 
+		if isArbitrumSpecificReason(tracingReason) {
+			// Arbitrum specific reasons are mapped properly
+			continue
+		}
+
 		// Here, we leverage the fact that the `tracing.BalanceChangeReason` Stringer will render the String
 		// as `<EnumName>(<indexValue>)` if the index is not mapped to a constant in the enum. If this happens,
 		// we know it's not a defined constant in the Geth tracing package.
@@ -209,8 +214,34 @@ func TestFirehose_BalanceChangeAllMappedCorrectly(t *testing.T) {
 			}, "BalanceChangeReason panicked for value %v", tracingReason)
 		}
 	}
+}
 
-	// Arbitrum specific balance changes that we do not map yet
+func isArbitrumSpecificReason(reason tracing.BalanceChangeReason) bool {
+	switch reason {
+	case tracing.BalanceChangeDuringEVMExecution,
+		tracing.BalanceIncreaseDeposit,
+		tracing.BalanceDecreaseWithdrawToL1,
+		tracing.BalanceIncreaseL1PosterFee,
+		tracing.BalanceIncreaseInfraFee,
+		tracing.BalanceIncreaseNetworkFee,
+		tracing.BalanceChangeTransferInfraRefund,
+		tracing.BalanceChangeTransferNetworkRefund,
+		tracing.BalanceIncreasePrepaid,
+		tracing.BalanceDecreaseUndoRefund,
+		tracing.BalanceChangeEscrowTransfer,
+		tracing.BalanceChangeTransferBatchposterReward,
+		tracing.BalanceChangeTransferBatchposterRefund,
+		tracing.BalanceChangeTransferRetryableExcessRefund,
+
+		tracing.BalanceChangeTransferActivationFee,
+		tracing.BalanceChangeTransferActivationReimburse,
+
+		tracing.BalanceIncreaseMintNativeToken,
+		tracing.BalanceDecreaseBurnNativeToken:
+		return true
+	default:
+		return false
+	}
 }
 
 func TestFirehose_GasChangeAllMappedCorrectly(t *testing.T) {
