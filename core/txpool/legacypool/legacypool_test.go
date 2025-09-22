@@ -17,6 +17,7 @@
 package legacypool
 
 import (
+	"context"
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"errors"
@@ -108,11 +109,33 @@ func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ec
 	return tx
 }
 
-func pricedDataTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey, bytes uint64) *types.Transaction {
-	data := make([]byte, bytes)
-	crand.Read(data)
+// pricedDataTransaction generates a signed transaction with fixed-size data,
+// and ensures that the resulting signature components (r and s) are exactly 32 bytes each,
+// producing transactions with deterministic size.
+//
+// This avoids variability in transaction size caused by leading zeros being omitted in
+// RLP encoding of r/s. Since r and s are derived from ECDSA, they occasionally have leading
+// zeros and thus can be shorter than 32 bytes.
+//
+// For example:
+//
+//	r: 0 leading zeros, bytesSize: 32, bytes: [221 ... 101]
+//	s: 1 leading zeros, bytesSize: 31, bytes: [0 75 ... 47]
+func pricedDataTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey, dataBytes uint64) *types.Transaction {
+	var tx *types.Transaction
 
-	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(0), gaslimit, gasprice, data), types.HomesteadSigner{}, key)
+	// 10 attempts is statistically sufficient since leading zeros in ECDSA signatures are rare and randomly distributed.
+	var retryTimes = 10
+	for i := 0; i < retryTimes; i++ {
+		data := make([]byte, dataBytes)
+		crand.Read(data)
+
+		tx, _ = types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(0), gaslimit, gasprice, data), types.HomesteadSigner{}, key)
+		_, r, s := tx.RawSignatureValues()
+		if len(r.Bytes()) == 32 && len(s.Bytes()) == 32 {
+			break
+		}
+	}
 	return tx
 }
 
@@ -207,13 +230,28 @@ func (r *reserver) Has(address common.Address) bool {
 	return false // reserver only supports a single pool
 }
 
+// dummyFilter is a simple ingress filter used in tests to toggle whether
+// transactions should be accepted or rejected.
+type dummyFilter struct {
+	allow atomic.Bool
+}
+
+func (f *dummyFilter) FilterTx(ctx context.Context, tx *types.Transaction) bool {
+	return f.allow.Load()
+}
+
 func setupPoolWithConfig(config *params.ChainConfig) (*LegacyPool, *ecdsa.PrivateKey) {
+	return setupPoolWithTxPoolConfig(config, testTxPoolConfig)
+}
+
+// setupPoolWithTxPoolConfig creates a new pool with custom pool configuration
+func setupPoolWithTxPoolConfig(chainConfig *params.ChainConfig, poolConfig Config) (*LegacyPool, *ecdsa.PrivateKey) {
 	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
-	blockchain := newTestBlockChain(config, 10000000, statedb, new(event.Feed))
+	blockchain := newTestBlockChain(chainConfig, 10000000, statedb, new(event.Feed))
 
 	key, _ := crypto.GenerateKey()
-	pool := New(testTxPoolConfig, blockchain)
-	if err := pool.Init(testTxPoolConfig.PriceLimit, blockchain.CurrentBlock(), newReserver()); err != nil {
+	pool := New(poolConfig, blockchain)
+	if err := pool.Init(poolConfig.PriceLimit, blockchain.CurrentBlock(), newReserver()); err != nil {
 		panic(err)
 	}
 	// wait for the pool to initialize
@@ -1164,6 +1202,42 @@ func TestQueueTimeLimiting(t *testing.T) {
 	}
 }
 
+// Tests that transactions already present in the pool are periodically rechecked
+// against ingress filters and dropped if they become invalid.
+func TestIngressFilterInterval(t *testing.T) {
+	original := testTxPoolConfig.FilterInterval
+	testTxPoolConfig.FilterInterval = 100 * time.Millisecond
+	defer func() { testTxPoolConfig.FilterInterval = original }()
+
+	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+	blockchain := newTestBlockChain(params.TestChainConfig, 1000000, statedb, new(event.Feed))
+
+	pool := New(testTxPoolConfig, blockchain)
+	filter := &dummyFilter{}
+	filter.allow.Store(true)
+	pool.SetIngressFilters([]txpool.IngressFilter{filter})
+	pool.Init(testTxPoolConfig.PriceLimit, blockchain.CurrentBlock(), newReserver())
+	defer pool.Close()
+
+	key, _ := crypto.GenerateKey()
+	testAddBalance(pool, crypto.PubkeyToAddress(key.PublicKey), big.NewInt(1000000))
+	if err := pool.addRemoteSync(pricedTransaction(0, 100000, big.NewInt(1), key)); err != nil {
+		t.Fatalf("failed to add remote transaction: %v", err)
+	}
+	pending, queued := pool.Stats()
+	if pending != 1 || queued != 0 {
+		t.Fatalf("unexpected pool state after add: %d pending %d queued", pending, queued)
+	}
+
+	filter.allow.Store(false)
+	time.Sleep(2 * testTxPoolConfig.FilterInterval)
+
+	pending, queued = pool.Stats()
+	if pending != 0 || queued != 0 {
+		t.Fatalf("transaction not filtered: pending %d queued %d", pending, queued)
+	}
+}
+
 // Tests that even if the transaction count belonging to a single account goes
 // above some threshold, as long as the transactions are executable, they are
 // accepted.
@@ -1272,7 +1346,7 @@ func TestAllowedTxSize(t *testing.T) {
 	const largeDataLength = txMaxSize - 200 // enough to have a 5 bytes RLP encoding of the data length number
 	txWithLargeData := pricedDataTransaction(0, pool.currentHead.Load().GasLimit, big.NewInt(1), key, largeDataLength)
 	maxTxLengthWithoutData := txWithLargeData.Size() - largeDataLength // 103 bytes
-	maxTxDataLength := txMaxSize - maxTxLengthWithoutData              // 131072 - 103 = 130953 bytes
+	maxTxDataLength := txMaxSize - maxTxLengthWithoutData              // 131072 - 103 = 130969 bytes
 
 	// Try adding a transaction with maximal allowed size
 	tx := pricedDataTransaction(0, pool.currentHead.Load().GasLimit, big.NewInt(1), key, maxTxDataLength)
@@ -2718,5 +2792,53 @@ func BenchmarkMultiAccountBatchInsert(b *testing.B) {
 	b.ResetTimer()
 	for _, tx := range batches {
 		pool.addRemotesSync([]*types.Transaction{tx})
+	}
+}
+
+func TestTxPoolMaxTxGasLimit(t *testing.T) {
+	t.Parallel()
+
+	// Create custom config with MaxTxGasLimit set
+	config := testTxPoolConfig
+	config.MaxTxGasLimit = 50000
+
+	pool, key := setupPoolWithTxPoolConfig(params.TestChainConfig, config)
+	defer pool.Close()
+
+	// Create transaction that exceeds the limit
+	tx := transaction(0, 100000, key) // gas limit > 50000
+	from, _ := deriveSender(tx)
+	testAddBalance(pool, from, big.NewInt(1000000))
+
+	// Should be rejected
+	if err := pool.addRemoteSync(tx); !errors.Is(err, txpool.ErrTxGasLimitExceeded) {
+		t.Errorf("Expected ErrTxGasLimitExceeded, got %v", err)
+	}
+
+	// Create transaction within the limit
+	tx2 := transaction(0, 30000, key) // gas limit < 50000
+	if err := pool.addRemoteSync(tx2); err != nil {
+		t.Errorf("Expected transaction within limit to be accepted, got %v", err)
+	}
+}
+
+func TestTxPoolMaxTxGasLimitDisabled(t *testing.T) {
+	t.Parallel()
+
+	// Test with default config (MaxTxGasLimit = 0, disabled)
+	config := testTxPoolConfig
+	config.MaxTxGasLimit = 0
+
+	pool, key := setupPoolWithTxPoolConfig(params.TestChainConfig, config)
+	defer pool.Close()
+
+	// Create transaction with high gas limit
+	tx := transaction(0, 100000, key)
+	from, _ := deriveSender(tx)
+	testAddBalance(pool, from, big.NewInt(1000000))
+
+	// Should be accepted since MaxTxGasLimit is disabled (0)
+	if err := pool.addRemoteSync(tx); err != nil {
+		t.Errorf("Expected transaction to be accepted when MaxTxGasLimit is disabled, got %v", err)
 	}
 }

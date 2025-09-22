@@ -56,10 +56,11 @@ var (
 	errBlockInterruptedByTimeout  = errors.New("timeout while building block")
 	errBlockInterruptedByResolve  = errors.New("payload resolution while building block")
 
+	// OP-Stack addition
+	errSupervisorInFailsafe = errors.New("supervisor in failsafe")
+
 	txConditionalRejectedCounter = metrics.NewRegisteredCounter("miner/transactionConditional/rejected", nil)
 	txConditionalMinedTimer      = metrics.NewRegisteredTimer("miner/transactionConditional/elapsedtime", nil)
-
-	txInteropRejectedCounter = metrics.NewRegisteredCounter("miner/transactionInterop/rejected", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -68,6 +69,7 @@ type environment struct {
 	signer   types.Signer
 	state    *state.StateDB // apply state changes here
 	tcount   int            // tx count in cycle
+	size     uint64         // size of the block we are building
 	gasPool  *core.GasPool  // available gas used to pack transactions
 	coinbase common.Address
 	evm      *vm.EVM
@@ -84,6 +86,11 @@ type environment struct {
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
 }
 
+// txFits reports whether the transaction fits into the block size limit.
+func (env *environment) txFitsSize(tx *types.Transaction) bool {
+	return env.size+tx.Size() < params.MaxBlockSize-maxBlockSizeBufferZone
+}
+
 const (
 	commitInterruptNone int32 = iota
 	commitInterruptNewHead
@@ -91,6 +98,11 @@ const (
 	commitInterruptTimeout
 	commitInterruptResolve
 )
+
+// Block size is capped by the protocol at params.MaxBlockSize. When producing blocks, we
+// try to say below the size including a buffer zone, this is to avoid going over the
+// maximum size with auxiliary data added into the block.
+const maxBlockSizeBufferZone = 1_000_000
 
 // newPayloadResult is the result of payload generation.
 type newPayloadResult struct {
@@ -120,23 +132,35 @@ type generateParams struct {
 	eip1559Params []byte             // Optional EIP-1559 parameters
 	interrupt     *atomic.Int32      // Optional interruption signal to pass down to worker.generateWork
 	isUpdate      bool               // Optional flag indicating that this is building a discardable update
+	minBaseFee    *uint64            // Optional minimum base fee
 
 	rpcCtx context.Context // context to control block-building RPC work. No RPC allowed if nil.
 }
 
 // generateWork generates a sealing block based on the given parameters.
-func (miner *Miner) generateWork(params *generateParams, witness bool) *newPayloadResult {
-	work, err := miner.prepareWork(params, witness)
+func (miner *Miner) generateWork(genParam *generateParams, witness bool) *newPayloadResult {
+	work, err := miner.prepareWork(genParam, witness)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+
+	// Check withdrawals fit max block size.
+	// Due to the cap on withdrawal count, this can actually never happen, but we still need to
+	// check to ensure the CL notices there's a problem if the withdrawal cap is ever lifted.
+	maxBlockSize := params.MaxBlockSize - maxBlockSizeBufferZone
+	if genParam.withdrawals.Size() > maxBlockSize {
+		return &newPayloadResult{err: errors.New("withdrawals exceed max block size")}
+	}
+	// Also add size of withdrawals to work block size.
+	work.size += uint64(genParam.withdrawals.Size())
+
 	if work.gasPool == nil {
 		gasLimit := work.header.GasLimit
 
 		// If we're building blocks with mempool transactions, we need to ensure that the
 		// gas limit is not higher than the effective gas limit. We must still accept any
 		// explicitly selected transactions with gas usage up to the block header's limit.
-		if !params.noTxs {
+		if !genParam.noTxs {
 			effectiveGasLimit := miner.config.EffectiveGasCeil
 			if effectiveGasLimit != 0 && effectiveGasLimit < gasLimit {
 				gasLimit = effectiveGasLimit
@@ -147,7 +171,7 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 
 	misc.EnsureCreate2Deployer(miner.chainConfig, work.header.Time, work.state)
 
-	for _, tx := range params.txs {
+	for _, tx := range genParam.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
 		err = miner.commitTransaction(work, tx)
@@ -155,9 +179,9 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			return &newPayloadResult{err: fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)}
 		}
 	}
-	if !params.noTxs {
+	if !genParam.noTxs {
 		// use shared interrupt if present
-		interrupt := params.interrupt
+		interrupt := genParam.interrupt
 		if interrupt == nil {
 			interrupt = new(atomic.Int32)
 		}
@@ -173,11 +197,13 @@ func (miner *Miner) generateWork(params *generateParams, witness bool) *newPaylo
 			log.Info("Block building got interrupted by payload resolution")
 		}
 	}
-	if intr := params.interrupt; intr != nil && params.isUpdate && intr.Load() != commitInterruptNone {
+
+	body := types.Body{Transactions: work.txs, Withdrawals: genParam.withdrawals}
+
+	if intr := genParam.interrupt; intr != nil && genParam.isUpdate && intr.Load() != commitInterruptNone {
 		return &newPayloadResult{err: errInterruptedUpdate}
 	}
 
-	body := types.Body{Transactions: work.txs, Withdrawals: params.withdrawals}
 	allLogs := make([]*types.Log, 0)
 	for _, r := range work.receipts {
 		allLogs = append(allLogs, r.Logs...)
@@ -283,7 +309,7 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 		// configure the gas limit of pending blocks with the miner gas limit config when using optimism
 		header.GasLimit = miner.config.GasCeil
 	}
-	if miner.chainConfig.IsHolocene(header.Time) {
+	if cfg := miner.chainConfig; cfg.IsHolocene(header.Time) {
 		if err := eip1559.ValidateHolocene1559Params(genParams.eip1559Params); err != nil {
 			return nil, err
 		}
@@ -294,7 +320,7 @@ func (miner *Miner) prepareWork(genParams *generateParams, witness bool) (*envir
 			d = miner.chainConfig.BaseFeeChangeDenominator(header.Time)
 			e = miner.chainConfig.ElasticityMultiplier()
 		}
-		header.Extra = eip1559.EncodeHoloceneExtraData(d, e)
+		header.Extra = eip1559.EncodeOptimismExtraData(cfg, header.Time, d, e, genParams.minBaseFee)
 	} else if genParams.eip1559Params != nil {
 		return nil, errors.New("got eip1559 params, expected none")
 	}
@@ -363,6 +389,7 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 	return &environment{
 		signer:   types.MakeSigner(miner.chainConfig, header.Number, header.Time),
 		state:    state,
+		size:     uint64(header.Size()),
 		coinbase: coinbase,
 		header:   header,
 		witness:  state.Witness(),
@@ -372,6 +399,17 @@ func (miner *Miner) makeEnv(parent *types.Header, header *types.Header, coinbase
 }
 
 func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) error {
+	// OP-Stack addition
+	interopAccessList := interoptypes.TxToInteropAccessList(tx)
+	if len(interopAccessList) > 0 {
+		backend, ok := miner.backend.(BackendWithInterop)
+		if ok && backend.GetSupervisorFailsafe() {
+			log.Trace("Supervisor failsafe is enabled, rejecting transaction", "hash", tx.Hash)
+			tx.SetRejected()
+			return errSupervisorInFailsafe
+		}
+	}
+
 	if tx.Type() == types.BlobTxType {
 		return miner.commitBlobTransaction(env, tx)
 	}
@@ -395,6 +433,7 @@ func (miner *Miner) commitTransaction(env *environment, tx *types.Transaction) e
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
+	env.size += tx.Size()
 	env.tcount++
 	return nil
 }
@@ -416,10 +455,12 @@ func (miner *Miner) commitBlobTransaction(env *environment, tx *types.Transactio
 	if err != nil {
 		return err
 	}
-	env.txs = append(env.txs, tx.WithoutBlobTxSidecar())
+	txNoBlob := tx.WithoutBlobTxSidecar()
+	env.txs = append(env.txs, txNoBlob)
 	env.receipts = append(env.receipts, receipt)
 	env.sidecars = append(env.sidecars, sc)
 	env.blobs += len(sc.Blobs)
+	env.size += txNoBlob.Size()
 	*env.header.BlobGasUsed += receipt.BlobGasUsed
 	env.tcount++
 	return nil
@@ -431,12 +472,6 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 		snap = env.state.Snapshot()
 		gp   = env.gasPool.Gas()
 	)
-	if !env.noTxs && miner.chain.Config().IsInterop(env.header.Time) {
-		// avoid execution if the interop check fails
-		if err := miner.checkInterop(env.rpcCtx, tx, env.header.Time); err != nil {
-			return nil, err
-		}
-	}
 	receipt, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
@@ -445,38 +480,12 @@ func (miner *Miner) applyTransaction(env *environment, tx *types.Transaction) (*
 	return receipt, err
 }
 
-func (miner *Miner) checkInterop(ctx context.Context, tx *types.Transaction, logTimestamp uint64) error {
-	if tx.Type() == types.DepositTxType {
-		return nil // deposit-txs are always safe
-	}
-	if tx.Rejected() {
-		return errors.New("transaction was previously rejected")
-	}
-	b, ok := miner.backend.(BackendWithInterop)
-	if !ok {
-		return fmt.Errorf("cannot mine interop txs without interop backend, got backend type %T", miner.backend)
-	}
-	if ctx == nil { // check if the miner was set up correctly to interact with an RPC
-		return errors.New("need RPC context to check executing messages")
-	}
-	accessList := interoptypes.TxToInteropAccessList(tx)
-	if len(accessList) == 0 {
-		return nil // avoid an RPC check if there are no executing messages to verify.
-	}
-	if err := b.CheckAccessList(ctx, accessList, interoptypes.CrossUnsafe, interoptypes.ExecutingDescriptor{Timestamp: logTimestamp, Timeout: 0}); err != nil {
-		if ctx.Err() != nil { // don't reject transactions permanently on RPC timeouts etc.
-			log.Debug("CheckAccessList timed out", "err", ctx.Err())
-			return err
-		}
-		txInteropRejectedCounter.Inc(1)
-		tx.SetRejected() // Mark the tx as rejected: it will not be welcome in the tx-pool anymore.
-		return err
-	}
-	return nil
-}
-
 func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *transactionsByPriceAndNonce, interrupt *atomic.Int32) error {
-	gasLimit := env.header.GasLimit
+	var (
+		isOsaka  = miner.chainConfig.IsOsaka(env.header.Number, env.header.Time)
+		isCancun = miner.chainConfig.IsCancun(env.header.Number, env.header.Time)
+		gasLimit = env.header.GasLimit
+	)
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
@@ -533,7 +542,7 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 		// Most of the blob gas logic here is agnostic as to if the chain supports
 		// blobs or not, however the max check panics when called on a chain without
 		// a defined schedule, so we need to verify it's safe to call.
-		if miner.chainConfig.IsCancun(env.header.Number, env.header.Time) {
+		if isCancun {
 			left := eip4844.MaxBlobsPerBlock(miner.chainConfig, env.header.Time) - env.blobs
 			if left < int(ltx.BlobGas/params.BlobTxBlobGasPerBlob) {
 				log.Trace("Not enough blob space left for transaction", "hash", ltx.Hash, "left", left, "needed", ltx.BlobGas/params.BlobTxBlobGasPerBlob)
@@ -566,6 +575,26 @@ func (miner *Miner) commitTransactions(env *environment, plainTxs, blobTxs *tran
 			log.Trace("Ignoring evicted transaction", "hash", ltx.Hash)
 			txs.Pop()
 			continue
+		}
+
+		// if inclusion of the transaction would put the block size over the
+		// maximum we allow, don't add any more txs to the payload.
+		if !env.txFitsSize(tx) {
+			break
+		}
+
+		// Make sure all transactions after osaka have cell proofs
+		if isOsaka {
+			if sidecar := tx.BlobTxSidecar(); sidecar != nil {
+				if sidecar.Version == types.BlobSidecarVersion0 {
+					log.Info("Including blob tx with v0 sidecar, recomputing proofs", "hash", ltx.Hash)
+					if err := sidecar.ToV1(); err != nil {
+						txs.Pop()
+						log.Warn("Failed to recompute cell proofs", "hash", ltx.Hash, "err", err)
+						continue
+					}
+				}
+			}
 		}
 
 		// Error may be ignored here. The error has already been checked
@@ -640,6 +669,9 @@ func (miner *Miner) fillTransactions(interrupt *atomic.Int32, env *environment) 
 	}
 	if env.header.ExcessBlobGas != nil {
 		filter.BlobFee = uint256.MustFromBig(eip4844.CalcBlobFee(miner.chainConfig, env.header))
+	}
+	if miner.chainConfig.IsOsaka(env.header.Number, env.header.Time) {
+		filter.GasLimitCap = params.MaxTxGas
 	}
 	filter.OnlyPlainTxs, filter.OnlyBlobTxs = true, false
 	pendingPlainTxs := miner.txpool.Pending(filter)
