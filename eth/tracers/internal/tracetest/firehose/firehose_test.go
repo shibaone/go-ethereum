@@ -200,7 +200,11 @@ func testBlockTracesCorrectly(t *testing.T, genesisSpec *core.Genesis, engine co
 			tracer, tracingHooks, onClose := newFirehoseTestTracer(t, model)
 			defer onClose()
 
-			chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, genesisSpec, nil, engine, vm.Config{Tracer: tracingHooks}, nil)
+			chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), genesisSpec, engine,
+				&core.BlockChainConfig{
+					VmConfig: vm.Config{Tracer: tracingHooks},
+				},
+			)
 			require.NoError(t, err, "failed to create tester chain")
 
 			chain.SetBlockValidatorAndProcessorForTesting(

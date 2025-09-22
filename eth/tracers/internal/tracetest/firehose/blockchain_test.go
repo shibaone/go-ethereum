@@ -74,6 +74,7 @@ func runPrestateBlock(t *testing.T, prestatePath string, hooks *tracing.Hooks) {
 		testState.StateDB,
 		header.Number,
 		header.Hash(),
+		header.Time,
 		tx,
 		&usedGas,
 		vmenv,
