@@ -30,8 +30,4 @@ COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
 COPY --from=unichain-node /usr/local/bin/op-node /app/unichain-node
 
 
-
-COPY --from=builder /go-ethereum/build/bin/main.go /usr/local/bin/bor
-
-
 ENTRYPOINT /app/geth
