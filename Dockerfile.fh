@@ -1,3 +1,5 @@
+ARG FIREHOSE_ETHEREUM="v2.13.1"
+
 FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.6 as optimism-node
 
 #check https://github.com/Uniswap/unichain-node/docker-compose.yml
@@ -17,7 +19,7 @@ RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
 
 
 # Pull Geth into a second stage deploy alpine container
-FROM alpine:latest
+FROM ghcr.io/streamingfast/firehose-ethereum:${FIREHOSE_ETHEREUM}
 
 RUN apk add --no-cache ca-certificates
 
@@ -26,5 +28,10 @@ COPY --from=builder /go-ethereum/build/bin/geth /app/geth
 
 COPY --from=optimism-node /usr/local/bin/op-node /app/op-node
 COPY --from=unichain-node /usr/local/bin/op-node /app/unichain-node
+
+
+
+COPY --from=builder /go-ethereum/build/bin/main.go /usr/local/bin/bor
+
 
 ENTRYPOINT /app/geth
