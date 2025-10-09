@@ -242,7 +242,7 @@ func opKeccak256(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
 	}
 
 	if evm.Config.Tracer != nil && evm.Config.Tracer.OnKeccakPreimage != nil {
-		evm.Config.Tracer.OnKeccakPreimage(interpreter.hasherBuf, data)
+		evm.Config.Tracer.OnKeccakPreimage(evm.hasherBuf, data)
 	}
 
 	size.SetBytes(evm.hasherBuf[:])
