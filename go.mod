@@ -291,7 +291,12 @@ replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v
 
 replace github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0
 
-replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.3.2
+// Prefer local repository for module resolution during development so that
+// internal packages like core/tracing resolve to the local codebase. The
+// previous replace redirected to an external fork which prevents resolving
+// internal packages during `go mod tidy`/build. Map the module to the local
+// directory instead.
+replace github.com/ethereum/go-ethereum => ./
 
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 
