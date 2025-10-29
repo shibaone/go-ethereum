@@ -7,6 +7,9 @@ on:
       - "[a-z0-9]+-v*"
       - "!**.docker"
 
+env:
+  ECR_REGION: us-east-1
+
 jobs:
   build:
     name: Build Release
@@ -41,18 +44,19 @@ jobs:
           make bor
           cp ./build/bin/bor ./build/bin/geth
 
-      # - name: Build Binary for ARM
-      #   if: matrix.os == 'ubuntu-20.04'
-      #   run: |
-      #     go mod download
-      #     make geth-linux-arm
-
-      - name: Upload Linux Build
-        uses: actions/upload-artifact@v4
-        if: matrix.os == 'ubuntu-20.04'
+      - name: Configure AWS Credentials
+        if: success()
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: linux
-          path: ./build/bin/geth
+          aws-access-key-id: ${{ secrets.AWS_ECR_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_ECR_SECRET_KEY_ID }}
+          aws-region: ${{ env.ECR_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
 
       - name: Upload MacOS Build
         uses: actions/upload-artifact@v4
@@ -172,6 +176,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         env:
+<<<<<<< HEAD
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
@@ -188,3 +193,8 @@ jobs:
           # ./arm7/geth-linux-arm-7
           # ./arm64/geth-linux-arm64
           # ./windows/geth_windows.exe
+=======
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          VERSION: ${{ steps.prepare.outputs.tag_name }}
+          #SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+>>>>>>> 306f34ee4 (bor v2.0.0)

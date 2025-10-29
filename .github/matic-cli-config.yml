@@ -2,8 +2,19 @@ defaultStake: 10000
 defaultFee: 2000
 borChainId: 15001
 heimdallChainId: heimdall-15001
-contractsBranch: mardizzone/node-16
+
+borDockerBuildContext: '../../bor'
+heimdallDockerBuildContext: 'https://github.com/shibaone/heimdall.git#develop'
+
 genesisContractsBranch: master
+contractsRepo: https://github.com/shibaone/pos-contracts.git
+contractsBranch: anvil-pos
+
+blockTime:
+  - '2'
+blockNumber:
+  - '0'
+
 sprintSize:
   - '64'
 blockNumber:
